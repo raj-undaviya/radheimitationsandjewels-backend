@@ -96,7 +96,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.parse(
-        url="postgresql://radheimitationsandjewels_database_uvcp_user:DQh5gbyq7TbJkwQxSNxxB5ieFkQwCqdM@dpg-d72ihbv5r7bs7386dov0-a.oregon-postgres.render.com/radheimitationsandjewels_database_uvcp",
+        url=os.getenv('DATABASE_URL'),
         conn_max_age=600,
         ssl_require=True
     ),
