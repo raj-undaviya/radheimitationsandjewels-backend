@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny, IsAdminUser
 from .models import User, PasswordResetOTP
 from .serializers import AuthenticateSerializer, AuthenticateSerializerWithToken
 import random
+from datetime import datetime
 from django.core.mail import send_mail
 
 
@@ -16,7 +17,6 @@ class AuthenticateView(APIView):
     def post(self, request):
 
         data = request.data
-        print("Received authentication request with data:", data)
 
         # -------- REGISTER --------
         if all(k in data for k in ["phonenumber", "first_name", "last_name", "username", "password"]):
@@ -42,7 +42,7 @@ class AuthenticateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         else:
-            print("Login attempt with data:", data)
+            
             # -------- LOGIN --------
             email = data.get("email")
             password = data.get("password")
@@ -55,6 +55,8 @@ class AuthenticateView(APIView):
                 serializer = AuthenticateSerializerWithToken(user)
 
                 user.token = serializer.data["token"]
+                user.is_active = True
+                user.last_login = datetime.now()
                 user.save()
 
                 return Response(
@@ -165,6 +167,17 @@ class VerifyOTPView(APIView):
             {'message': 'Password reset successfully'},
             status=status.HTTP_200_OK
         )
+    
+class LogoutView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user = request.user
+        user.token = None
+        user.is_active = False
+        user.save()
+        return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
     
 class CustomersView(APIView):
 

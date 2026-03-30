@@ -17,12 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from .views import AuthenticateView, ForgetPasswordView, VerifyOTPView, CustomersView, CustomersDetailView
+from .views import AuthenticateView, ForgetPasswordView, VerifyOTPView, CustomersView, CustomersDetailView, LogoutView
 
 urlpatterns = [
     path('auth', AuthenticateView.as_view(), name='authenticate'),
     path('forget-password', ForgetPasswordView.as_view(), name='forget-password'),
     path('verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
+    path('logout/', LogoutView.as_view(), name='logout'),
     path('customers', CustomersView.as_view(), name='customers'),
     path('customers/<int:customer_id>', CustomersDetailView.as_view(), name='customer-detail'),
 ]

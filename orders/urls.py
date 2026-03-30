@@ -16,10 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from .views import CartView, CartItemDetailView, WishlistDetailView, WishlistView, OrderView, OrderDetailView
 
 urlpatterns = [
-    # path('', AuthenticateView.as_view(), name='authenticate'),
-    # path('', include('users.urls')),
-    # path('api/', include('orders.urls')),
-    # path('api/', include('products.urls')),
+    path('', OrderView.as_view(), name='orders'),
+    path('<int:order_id>', OrderDetailView.as_view(), name='order-detail'),
+    path('cart', CartView.as_view(), name='cart'),
+    path('cart/<int:item_id>', CartItemDetailView.as_view(), name='cart-item-detail'),
+    path('wishlist', WishlistView.as_view(), name='wishlist'),
+    path('wishlist/<int:wishlist_id>', WishlistDetailView.as_view(), name='wishlist-detail'),
 ]

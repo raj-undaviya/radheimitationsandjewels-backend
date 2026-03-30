@@ -13,22 +13,7 @@ from users.permissions import IsAdminUserRole
 
 class ProductView(APIView):
 
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [AllowAny()]
-        return [IsAdminUserRole()]
-
-    def get(self, request):
-        product = Product.objects.all()
-        serializer = ProductSerializer(product, many=True)
-        return Response(
-            {
-                "message": "Products retrieved successfully",
-                "data": serializer.data
-            },
-            status=status.HTTP_200_OK
-        )
-
+    permission_classes = [IsAdminUserRole]
     def post(self, request):
         data = request.data
 
@@ -71,6 +56,18 @@ class ProductView(APIView):
                 "errors": serializer.errors
             },
             status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    permission_classes = [AllowAny]
+    def get(self, request):
+        product = Product.objects.all()
+        serializer = ProductSerializer(product, many=True)
+        return Response(
+            {
+                "message": "Products retrieved successfully",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
         )
 
 
@@ -141,7 +138,6 @@ class ProductDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-
 class CategoryView(APIView):
 
     def get_permissions(self):
@@ -179,49 +175,6 @@ class CategoryView(APIView):
             {'message': 'Category creation failed', 'errors': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
-
-
-class SubCategoryView(APIView):
-
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [AllowAny()]
-        return [IsAdminUserRole()]
-
-    def get(self, request):
-        subcategories = SubCategory.objects.all()
-        serializer = SubCategorySerializer(subcategories, many=True)
-        return Response(
-            {
-                'message': 'List of subcategories',
-                'data': serializer.data
-            },
-            status=status.HTTP_200_OK
-        )
-
-    def post(self, request):
-        data = request.data
-        serializer = SubCategorySerializer(data={
-            'name': data.get('subcategory_name'),
-            'description': data.get('description', None),
-            'category': data.get('category', None)
-        })
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {
-                    'message': 'Subcategory added successfully',
-                    'data': serializer.data
-                },
-                status=status.HTTP_201_CREATED
-            )
-
-        return Response(
-            {'message': 'Subcategory creation failed', 'errors': serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
 
 class CategoryDetailView(APIView):
 
@@ -289,6 +242,50 @@ class CategoryDetailView(APIView):
                 {'message': f'Category with id {category_id} not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+class SubCategoryView(APIView):
+
+    # def get_permissions(self):
+    #     if self.request.method == 'GET':
+    #         print("Self ------->", self.request)
+    #         return [AllowAny()]
+    #     return [IsAdminUserRole()]
+
+    permission_classes = [IsAdminUserRole]
+    def post(self, request):
+        data = request.data
+        serializer = SubCategorySerializer(data={
+            'name': data.get('subcategory_name'),
+            'description': data.get('description', None),
+            'category': data.get('category', None)
+        })
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    'message': 'Subcategory added successfully',
+                    'data': serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        return Response(
+            {'message': 'Subcategory creation failed', 'errors': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    permission_classes = [AllowAny]
+    def get(self, request):
+        subcategories = SubCategory.objects.all()
+        serializer = SubCategorySerializer(subcategories, many=True)
+        return Response(
+            {
+                'message': 'List of subcategories',
+                'data': serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
 
 
 class SubCategoryDetailView(APIView):
