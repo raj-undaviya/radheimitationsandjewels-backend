@@ -1,3 +1,4 @@
+from users.permissions import IsAdminUserRole
 from .serializers import OrderSerializer
 from .models import Cart, CartItem, Wishlist, Order, OrderItem
 from .serializers import CartSerializer, CartItemSerializer, WishlistSerializer, OrderSerializer, OrderItemSerializer
@@ -5,6 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Sum, Count, F
+from django.contrib.auth import get_user_model
+from rest_framework.permissions import IsAuthenticated
+from datetime import datetime, timedelta
+
+User = get_user_model()
 
 class CartView(APIView):
 
@@ -203,3 +210,134 @@ class OrderDetailView(APIView):
                 {"message": "Order not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+class AdminDashboardView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def get(self, request):
+
+        today = datetime.now().date()
+        last_7_days = today - timedelta(days=7)
+
+        total_users = User.objects.count()
+        total_orders = Order.objects.count()
+        total_revenue = Order.objects.aggregate(total=Sum('total_amount'))['total'] or 0
+
+        recent_orders = Order.objects.filter(created_at__date__gte=last_7_days).count()
+
+        return Response(
+            {
+                "message": "Dashboard stats",
+                "data": {
+                    "total_users": total_users,
+                    "total_orders": total_orders,
+                    "total_revenue": total_revenue,
+                    "orders_last_7_days": recent_orders
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+    
+class AdminOrderListView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def get(self, request):
+        orders = Order.objects.all().order_by('-created_at')
+        serializer = OrderSerializer(orders, many=True)
+
+        return Response(
+            {
+                "message": "All orders",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+    
+class AdminOrderUpdateStatusView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def patch(self, request, order_id):
+        try:
+            order = Order.objects.get(id=order_id)
+
+            new_status = request.data.get("status")
+
+            if new_status not in dict(Order.STATUS_CHOICES):
+                return Response(
+                    {"message": "Invalid status"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            order.status = new_status
+            order.save()
+
+            return Response(
+                {
+                    "message": "Order status updated",
+                    "data": OrderSerializer(order).data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        except Order.DoesNotExist:
+            return Response(
+                {"message": "Order not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+class AdminSalesAnalyticsView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def get(self, request):
+
+        monthly_sales = (
+            Order.objects
+            .values('created_at__month')
+            .annotate(total_sales=Sum('total_amount'), total_orders=Count('id'))
+            .order_by('created_at__month')
+        )
+
+        return Response(
+            {
+                "message": "Sales analytics",
+                "data": monthly_sales
+            },
+            status=status.HTTP_200_OK
+        )
+    
+class AdminUsersView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def get(self, request):
+
+        users = User.objects.all().values('id', 'email', 'role', 'date_joined').order_by('-date_joined')
+        total_users = users.count()
+
+        return Response(
+            {
+                "message": "Users list",
+                "total_users": total_users,
+                "data": list(users)
+            },
+            status=status.HTTP_200_OK
+        )
+
+class AdminTopProductsView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    def get(self, request):
+
+        top_products = (
+            OrderItem.objects
+            .values('product__id', 'product__name')
+            .annotate(total_sold=Sum('quantity'))
+            .order_by('-total_sold')[:10]
+        )
+
+        return Response(
+            {
+                "message": "Top selling products",
+                "data": top_products
+            },
+            status=status.HTTP_200_OK
+        )

@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from .views import CartView, CartItemDetailView, WishlistDetailView, WishlistView, OrderView, OrderDetailView
+from .views import AdminSalesAnalyticsView, AdminTopProductsView, AdminUsersView, \
+    CartView, CartItemDetailView, WishlistDetailView, WishlistView, OrderView, OrderDetailView, \
+    AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView
 
 urlpatterns = [
     path('', OrderView.as_view(), name='orders'),

@@ -17,9 +17,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from orders.views import AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, AdminTopProductsView, AdminUsersView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/users/', include('users.urls')),
     path('api/orders/', include('orders.urls')),
     path('api/products/', include('products.urls')),
+
+    # ====== Admin Panel URLs ======
+    path('admin-panel/dashboard', AdminDashboardView.as_view()),
+    path('admin-panel/orders', AdminOrderListView.as_view()),
+    path('admin-panel/orders/<int:order_id>/status', AdminOrderUpdateStatusView.as_view()),
+    path('admin-panel/sales', AdminSalesAnalyticsView.as_view()),
+    path('admin-panel/users', AdminUsersView.as_view()),
+    path('admin-panel/top-products', AdminTopProductsView.as_view()),
 ]
