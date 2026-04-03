@@ -14,11 +14,8 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import include, path
-from .views import AdminSalesAnalyticsView, AdminTopProductsView, AdminUsersView, \
-    CartView, CartItemDetailView, WishlistDetailView, WishlistView, OrderView, OrderDetailView, \
-    AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView
+from django.urls import path
+from .views import CartView, CartItemDetailView, WishlistDetailView, WishlistView, OrderView, OrderDetailView
 
 urlpatterns = [
     path('', OrderView.as_view(), name='orders'),
