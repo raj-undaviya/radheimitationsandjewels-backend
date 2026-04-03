@@ -62,10 +62,19 @@ class ProductView(APIView):
     def get(self, request):
         product = Product.objects.all()
         serializer = ProductSerializer(product, many=True)
+        total_inventory_value = round(sum([p.price * p.stock for p in product]), 2)
+        total_stock_quantity = sum([p.stock for p in product])
+        low_stock_alert = any(p.stock < 10 for p in product)
+        out_of_stock = any(p.stock == 0 for p in product)
+        
         return Response(
             {
                 "message": "Products retrieved successfully",
-                "data": serializer.data
+                "data": serializer.data,
+                "total_inventory_value": total_inventory_value,
+                "total_stock_quantity": total_stock_quantity,
+                "low_stock_alert": low_stock_alert,
+                "out_of_stock": out_of_stock
             },
             status=status.HTTP_200_OK
         )
