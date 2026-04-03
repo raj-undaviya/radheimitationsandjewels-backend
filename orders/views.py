@@ -221,7 +221,7 @@ class AdminDashboardView(APIView):
 
         total_pending_orders = Order.objects.filter(status='pending').count()
         total_completed_orders = Order.objects.filter(status='completed').count()
-        daily_revenue = (Order.objects.filter(created_at__date=today, status='completed').aggregate(total=Sum('total_amount'))['total'] or 0)
+        daily_revenue = (Order.objects.filter(created_at__date=today).aggregate(total=Sum('total_amount'))['total'] or 0)
 
 
         total_users = User.objects.count()
