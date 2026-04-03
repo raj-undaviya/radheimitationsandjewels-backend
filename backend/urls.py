@@ -26,10 +26,10 @@ urlpatterns = [
     path('api/products/', include('products.urls')),
 
     # ====== Admin Panel URLs ======
-    path('admin-panel/dashboard', AdminDashboardView.as_view()),
-    path('admin-panel/orders', AdminOrderListView.as_view()),
-    path('admin-panel/orders/<int:order_id>/status', AdminOrderUpdateStatusView.as_view()),
-    path('admin-panel/sales', AdminSalesAnalyticsView.as_view()),
-    path('admin-panel/users', AdminUsersView.as_view()),
-    path('admin-panel/top-products', AdminTopProductsView.as_view()),
+    path('api/admin-panel/dashboard', AdminDashboardView.as_view()),
+    path('api/admin-panel/orders', AdminOrderListView.as_view()),
+    path('api/admin-panel/orders/<int:order_id>/status', AdminOrderUpdateStatusView.as_view()),
+    path('api/admin-panel/sales', AdminSalesAnalyticsView.as_view()),
+    path('api/admin-panel/users', AdminUsersView.as_view()),
+    path('api/admin-panel/top-products', AdminTopProductsView.as_view()),
 ]
