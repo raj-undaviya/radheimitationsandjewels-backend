@@ -158,7 +158,7 @@ class OrderView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        orders = Order.objects.filter(user=request.user)
+        orders = Order.objects.filter(user=request.user).order_by('-created_at')
         serializer = OrderSerializer(orders, many=True)
 
         return Response(
@@ -219,6 +219,11 @@ class AdminDashboardView(APIView):
         today = datetime.now().date()
         last_7_days = today - timedelta(days=7)
 
+        total_pending_orders = Order.objects.filter(status='pending').count()
+        total_completed_orders = Order.objects.filter(status='completed').count()
+        daily_revenue = (Order.objects.filter(created_at__date=today, status='completed').aggregate(total=Sum('total_amount'))['total'] or 0)
+
+
         total_users = User.objects.count()
         total_orders = Order.objects.count()
         total_revenue = Order.objects.aggregate(total=Sum('total_amount'))['total'] or 0
@@ -232,7 +237,10 @@ class AdminDashboardView(APIView):
                     "total_users": total_users,
                     "total_orders": total_orders,
                     "total_revenue": total_revenue,
-                    "orders_last_7_days": recent_orders
+                    "orders_last_7_days": recent_orders,
+                    "pending_orders": total_pending_orders,
+                    "completed_orders": total_completed_orders,
+                    "daily_revenue": daily_revenue
                 }
             },
             status=status.HTTP_200_OK
