@@ -126,10 +126,8 @@ class ProductDetailView(APIView):
 
 class CategoryView(APIView):
 
-    parser_classes = [MultiPartParser, FormParser, JSONParser]  # ✅
-
-    permission_classes = [AllowAny]
     def get(self, request):
+
         categories = Category.objects.all()
         serializer = CategorySerializer(categories, many=True)
         return Response(
@@ -137,6 +135,7 @@ class CategoryView(APIView):
             status=status.HTTP_200_OK
         )
 
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # ✅
     permission_classes = [IsAdminUserRole]
     def post(self, request):
         data = request.data
@@ -149,7 +148,10 @@ class CategoryView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(
-                {'message': 'Category added successfully'},
+                {
+                    'message': 'Category added successfully',
+                    'data': serializer.data
+                 },
                 status=status.HTTP_201_CREATED
             )
         return Response(
@@ -200,9 +202,10 @@ class CategoryDetailView(APIView):
     def delete(self, request, category_id):
         try:
             category = Category.objects.get(id=category_id)
+            category_name = category.name
             category.delete()
             return Response(
-                {'message': f'Category {category_id} deleted successfully'},
+                {'message': f'Category {category_name} deleted successfully'},
                 status=status.HTTP_204_NO_CONTENT
             )
         except Category.DoesNotExist:

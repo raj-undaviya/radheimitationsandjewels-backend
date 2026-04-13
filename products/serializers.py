@@ -12,7 +12,10 @@ class CategorySerializer(ModelSerializer):
         fields = "__all__"
 
     def get_category_image_url(self, obj):
-        return obj.category_image.url if obj.category_image else None
+        try:
+            return obj.category_image.url if obj.category_image else None
+        except Exception:
+            return None
 
 
 class SubCategorySerializer(ModelSerializer):

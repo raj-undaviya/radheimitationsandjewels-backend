@@ -2,11 +2,17 @@ from django.db import models
 from cloudinary.models import CloudinaryField
 
 class Category(models.Model):
+    CATEGORY_STATUS = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive')
+    ]
+
     name = models.CharField(max_length=255)
     description = models.TextField()
     category_image = CloudinaryField('category_image', default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(max_length=20, choices=CATEGORY_STATUS, default='active')
 
     def __str__(self):
         return self.name
