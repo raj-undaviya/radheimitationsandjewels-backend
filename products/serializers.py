@@ -17,7 +17,6 @@ class CategorySerializer(ModelSerializer):
         except Exception:
             return None
 
-
 class SubCategorySerializer(ModelSerializer):
     class Meta:
         model  = SubCategory

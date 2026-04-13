@@ -126,12 +126,25 @@ class ProductDetailView(APIView):
 
 class CategoryView(APIView):
 
+    permission_classes = [IsAdminUserRole, AllowAny]
     def get(self, request):
 
         categories = Category.objects.all()
+        sub_categoty_count = SubCategory.objects.count()
+        inactive_categories = categories.filter(status='inactive').count()
+        active_categories = categories.filter(status='active').count()
+        total_categories = categories.count()
+        sub_items_count = sub_categoty_count
         serializer = CategorySerializer(categories, many=True)
         return Response(
-            {"message": "Categories retrieved successfully", "data": serializer.data},
+            {
+                "message": "Categories retrieved successfully",
+                "data": serializer.data,
+                "total_categories": total_categories,
+                "subcategory_count": sub_items_count,
+                "active": active_categories,
+                "inactive": inactive_categories,
+            },
             status=status.HTTP_200_OK
         )
 
