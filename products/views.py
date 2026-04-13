@@ -126,28 +126,6 @@ class ProductDetailView(APIView):
 
 class CategoryView(APIView):
 
-    permission_classes = [IsAdminUserRole, AllowAny]
-    def get(self, request):
-
-        categories = Category.objects.all()
-        sub_categoty_count = SubCategory.objects.count()
-        inactive_categories = categories.filter(status='inactive').count()
-        active_categories = categories.filter(status='active').count()
-        total_categories = categories.count()
-        sub_items_count = sub_categoty_count
-        serializer = CategorySerializer(categories, many=True)
-        return Response(
-            {
-                "message": "Categories retrieved successfully",
-                "data": serializer.data,
-                "total_categories": total_categories,
-                "subcategory_count": sub_items_count,
-                "active": active_categories,
-                "inactive": inactive_categories,
-            },
-            status=status.HTTP_200_OK
-        )
-
     parser_classes = [MultiPartParser, FormParser, JSONParser]  # ✅
     permission_classes = [IsAdminUserRole]
     def post(self, request):
@@ -170,6 +148,28 @@ class CategoryView(APIView):
         return Response(
             {'message': 'Category creation failed', 'errors': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    permission_classes = [AllowAny]
+    def get(self, request):
+
+        categories = Category.objects.all()
+        sub_categoty_count = SubCategory.objects.count()
+        inactive_categories = categories.filter(status='inactive').count()
+        active_categories = categories.filter(status='active').count()
+        total_categories = categories.count()
+        sub_items_count = sub_categoty_count
+        serializer = CategorySerializer(categories, many=True)
+        return Response(
+            {
+                "message": "Categories retrieved successfully",
+                "data": serializer.data,
+                "total_categories": total_categories,
+                "subcategory_count": sub_items_count,
+                "active": active_categories,
+                "inactive": inactive_categories,
+            },
+            status=status.HTTP_200_OK
         )
 
 
@@ -230,12 +230,6 @@ class CategoryDetailView(APIView):
 
 class SubCategoryView(APIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]  # ✅
-
-    # def get_permissions(self):
-    #     if self.request.method == 'GET':
-    #         print("Self ------->", self.request)
-    #         return [AllowAny()]
-    #     return [IsAdminUserRole()]
 
     permission_classes = [IsAdminUserRole]
     def post(self, request):
@@ -313,13 +307,14 @@ class SubCategoryDetailView(APIView):
     def delete(self, request, subcategory_id):
         try:
             subcategory = SubCategory.objects.get(id=subcategory_id)
+            subcategory_name = subcategory.name
             subcategory.delete()
             return Response(
-                {'message': f'Subcategory {subcategory_id} deleted successfully'},
+                {'message': f'Subcategory {subcategory_name} deleted successfully'},
                 status=status.HTTP_204_NO_CONTENT
             )
         except SubCategory.DoesNotExist:
             return Response(
-                {'message': f'Subcategory with id {subcategory_id} not found'},
+                {'message': f'Subcategory with id {subcategory_name} not found'},
                 status=status.HTTP_404_NOT_FOUND
             )

@@ -18,9 +18,14 @@ class Category(models.Model):
         return self.name
     
 class SubCategory(models.Model):
+    SUBCATEGORY_STATUS = [
+        ('active', 'Active'),
+        ('inactive', 'Inactive')
+    ]
     name = models.CharField(max_length=255)
     description = models.TextField()
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories')
+    status = models.CharField(max_length=20, choices=SUBCATEGORY_STATUS, default='active')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
