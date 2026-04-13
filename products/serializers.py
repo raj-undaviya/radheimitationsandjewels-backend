@@ -18,9 +18,22 @@ class CategorySerializer(ModelSerializer):
             return None
 
 class SubCategorySerializer(ModelSerializer):
+    parent_category_name = serializers.CharField(source='category.name', read_only=True)
+    items_count          = serializers.SerializerMethodField(read_only=True)
+    image_url            = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model  = SubCategory
         fields = "__all__"
+
+    def get_items_count(self, obj):
+        return obj.products.count()  # adjust if your related_name is different
+
+    def get_image_url(self, obj):
+        try:
+            return obj.image.url if obj.image else None
+        except Exception:
+            return None
 
 
 class ProductImageSerializer(ModelSerializer):
@@ -31,8 +44,7 @@ class ProductImageSerializer(ModelSerializer):
         fields = ["id", "image_url"]
 
     def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
-
+        return obj.image_url.url if obj.image_url else None
 
 class ProductSerializer(serializers.ModelSerializer):
     # ✅ Accepts multiple image files on write (multipart/form-data)
@@ -60,7 +72,7 @@ class ProductSerializer(serializers.ModelSerializer):
             )
             ProductImage.objects.create(
                 product=product,
-                image=upload_result['public_id']  # store Cloudinary public_id
+                image_url=upload_result['public_id']  # store Cloudinary public_id
             )
 
         return product
@@ -81,7 +93,7 @@ class ProductSerializer(serializers.ModelSerializer):
             )
             ProductImage.objects.create(
                 product=instance,
-                image=upload_result['public_id']
+                image_url=upload_result['public_id']
             )
 
         return instance

@@ -52,8 +52,8 @@ class ProductView(APIView):
         serializer = ProductSerializer(product, many=True)
         total_inventory_value = round(sum([p.price * p.stock for p in product]), 2)
         total_stock_quantity  = sum([p.stock for p in product])
-        low_stock_alert       = any(p.stock < 10 for p in product)
-        out_of_stock          = any(p.stock == 0 for p in product)
+        low_stock_alert       = sum([p.stock < 10 for p in product])
+        out_of_stock          = sum([p.stock == 0 for p in product])
 
         return Response(
             {
@@ -254,8 +254,14 @@ class SubCategoryView(APIView):
     
     permission_classes = [AllowAny]
     def get(self, request):
-        subcategories = SubCategory.objects.all()
-        serializer    = SubCategorySerializer(subcategories, many=True)
+        category_id = request.query_params.get('category', None)
+
+        if category_id:
+            subcategories = SubCategory.objects.filter(category__id=category_id)
+        else:
+            subcategories = SubCategory.objects.all()
+
+        serializer = SubCategorySerializer(subcategories, many=True)
         return Response(
             {'message': 'List of subcategories', 'data': serializer.data},
             status=status.HTTP_200_OK
