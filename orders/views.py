@@ -157,18 +157,6 @@ class OrderView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        orders = Order.objects.filter(user=request.user).order_by('-created_at')
-        serializer = OrderSerializer(orders, many=True)
-
-        return Response(
-            {
-                "message": "Orders retrieved",
-                "data": serializer.data
-            },
-            status=status.HTTP_200_OK
-        )
-
     def post(self, request):
         serializer = OrderSerializer(data=request.data, context={'request': request})
 
@@ -188,6 +176,23 @@ class OrderView(APIView):
             status=status.HTTP_400_BAD_REQUEST
         )
     
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        orders = Order.objects.filter(user=request.user).order_by('-created_at')
+        serializer = OrderSerializer(orders, many=True)
+        pending_orders = orders.filter(status='pending').count()
+        daily_revenue = orders.filter(created_at__date=datetime.now().date()).aggregate(total=Sum('total_amount'))['total'] or 0
+
+        return Response(
+            {
+                "message": "Orders retrieved",
+                "data": serializer.data,
+                "pending_orders": pending_orders,
+                "daily_revenue": daily_revenue
+            },
+            status=status.HTTP_200_OK
+        )
+    
 class OrderDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -202,6 +207,32 @@ class OrderDetailView(APIView):
                     "message": "Order details",
                     "data": serializer.data
                 },
+                status=status.HTTP_200_OK
+            )
+
+        except Order.DoesNotExist:
+            return Response(
+                {"message": "Order not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+    def delete(self, request, order_id):
+        try:
+            order = Order.objects.get(id=order_id)
+            print("Cancelling order:", order)
+            order.delete()
+
+            # if order.status != "pending":
+            #     return Response(
+            #         {"message": "Only pending orders can be cancelled"},
+            #         status=status.HTTP_400_BAD_REQUEST
+            #     )
+
+            # order.status = "cancelled"
+            # order.save()
+
+            return Response(
+                {"message": "Order cancelled"},
                 status=status.HTTP_200_OK
             )
 

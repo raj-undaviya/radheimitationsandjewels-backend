@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/users/', include('users.urls')),
     path('api/orders/', include('orders.urls')),
     path('api/products/', include('products.urls')),
+    path('api/appointments/', include('appointments.urls')),
 
     # ====== Admin Panel URLs ======
     path('api/admin-panel/dashboard', AdminDashboardView.as_view()),

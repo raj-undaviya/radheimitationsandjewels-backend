@@ -13,12 +13,14 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['price']   # ✅ FIX
 
     def get_product_details(self, obj):
+        if not obj.product:
+            return None
         image = obj.product.images.first()
         return {
             "id": obj.product.id,
             "name": obj.product.name,
             "price": obj.product.price,
-            "image": image.image_url if image else None
+            "image": image.image_url.url if image and image.image_url else None
         }
     
 class CartSerializer(serializers.ModelSerializer):
@@ -44,7 +46,7 @@ class WishlistSerializer(serializers.ModelSerializer):
             "id": obj.product.id,
             "name": obj.product.name,
             "price": obj.product.price,
-            "image": image.image_url if image else None
+            "image": image.image_url.url if image and image.image_url else None
         }
     
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -57,12 +59,13 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_details', 'quantity', 'price', 'total_price']
 
     def get_product_details(self, obj):
+        print("Getting product details for OrderItem:", obj.product)
         image = obj.product.images.first()
         return {
             "id": obj.product.id if obj.product else None,
             "name": obj.product.name if obj.product else None,
             "price": obj.price,
-            "image": image.image_url if image else None
+            "image": image.image_url.url if image and image.image_url else None
         }
     
 class OrderSerializer(serializers.ModelSerializer):
