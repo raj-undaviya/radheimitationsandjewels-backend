@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from appointments.views import AdminAppointmentListView
 from orders.views import AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, AdminTopProductsView, AdminUsersView
 
 urlpatterns = [
@@ -33,4 +34,6 @@ urlpatterns = [
     path('api/admin-panel/sales', AdminSalesAnalyticsView.as_view()),
     path('api/admin-panel/users', AdminUsersView.as_view()),
     path('api/admin-panel/top-products', AdminTopProductsView.as_view()),
+    path('api/admin-panel/appointments', AdminAppointmentListView.as_view()),
+
 ]
