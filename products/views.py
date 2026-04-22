@@ -70,23 +70,7 @@ class ProductView(APIView):
 
 class ProductDetailView(APIView):
 
-    permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]  # ✅
-
-    def get(self, request, product_id):
-        try:
-            product    = Product.objects.get(id=product_id)
-            serializer = ProductSerializer(product)
-            return Response(
-                {'message': f'Details of product {product_id}', 'data': serializer.data},
-                status=status.HTTP_200_OK
-            )
-        except Product.DoesNotExist:
-            return Response(
-                {'message': f'Product with id {product_id} not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
     permission_classes = [IsAdminUserRole]
     def put(self, request, product_id):
         try:
@@ -108,6 +92,7 @@ class ProductDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+
     permission_classes = [IsAdminUserRole]
     def delete(self, request, product_id):
         try:
@@ -123,6 +108,21 @@ class ProductDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+    permission_classes = [AllowAny]
+    def get(self, request, product_id):
+        try:
+            print(request.user)
+            product    = Product.objects.get(id=product_id)
+            serializer = ProductSerializer(product)
+            return Response(
+                {'message': f'Details of product {product_id}', 'data': serializer.data},
+                status=status.HTTP_200_OK
+            )
+        except Product.DoesNotExist:
+            return Response(
+                {'message': f'Product with id {product_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class CategoryView(APIView):
 
