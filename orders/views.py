@@ -220,7 +220,9 @@ class OrderDetailView(APIView):
         
     def delete(self, request, order_id):
         try:
-            order = Order.objects.get(id=order_id, user=request.user)
+            print("Received request to cancel order with ID:", order_id)
+            order = Order.objects.get(id=order_id)
+            print("Attempting to cancel order:", order)
 
             # ✅ Only allow cancelling pending orders
             if order.status != "pending":
@@ -241,6 +243,13 @@ class OrderDetailView(APIView):
             return Response(
                 {"message": "Order cancelled and stock restored"},
                 status=status.HTTP_200_OK
+            )
+        
+        except Exception as e:
+            print("Error cancelling order:", str(e))
+            return Response(
+                {"message": "An error occurred while cancelling the order"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
         except Order.DoesNotExist:
