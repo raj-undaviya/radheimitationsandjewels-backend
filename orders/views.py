@@ -1,3 +1,5 @@
+from appointments.models import Appointment
+from appointments.serializers import AppointmentSerializer
 from users.permissions import IsAdminUserRole
 from .serializers import OrderSerializer
 from .models import Cart, CartItem, Wishlist, Order, OrderItem
@@ -218,21 +220,26 @@ class OrderDetailView(APIView):
         
     def delete(self, request, order_id):
         try:
-            order = Order.objects.get(id=order_id)
-            print("Cancelling order:", order)
-            order.delete()
+            order = Order.objects.get(id=order_id, user=request.user)
 
-            # if order.status != "pending":
-            #     return Response(
-            #         {"message": "Only pending orders can be cancelled"},
-            #         status=status.HTTP_400_BAD_REQUEST
-            #     )
+            # ✅ Only allow cancelling pending orders
+            if order.status != "pending":
+                return Response(
+                    {"message": "Only pending orders can be cancelled"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            # order.status = "cancelled"
-            # order.save()
+            # ✅ Restore stock for each item
+            for item in order.items.all():
+                if item.product:
+                    item.product.stock += item.quantity
+                    item.product.save()
+
+            order.status = "cancelled"
+            order.save()
 
             return Response(
-                {"message": "Order cancelled"},
+                {"message": "Order cancelled and stock restored"},
                 status=status.HTTP_200_OK
             )
 
@@ -254,6 +261,9 @@ class AdminDashboardView(APIView):
         total_completed_orders = Order.objects.filter(status='completed').count()
         daily_revenue = (Order.objects.filter(created_at__date=today).aggregate(total=Sum('total_amount'))['total'] or 0)
 
+        total_appointments = Appointment.objects.count()
+        appointments = Appointment.objects.all()
+        appointments_data = AppointmentSerializer(appointments, many=True).data
 
         total_users = User.objects.count()
         total_orders = Order.objects.count()
@@ -271,7 +281,9 @@ class AdminDashboardView(APIView):
                     "orders_last_7_days": recent_orders,
                     "pending_orders": total_pending_orders,
                     "completed_orders": total_completed_orders,
-                    "daily_revenue": daily_revenue
+                    "daily_revenue": daily_revenue,
+                    "total_appointments": total_appointments,
+                    "appointments": appointments_data
                 }
             },
             status=status.HTTP_200_OK

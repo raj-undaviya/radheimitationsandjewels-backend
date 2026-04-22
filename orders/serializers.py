@@ -103,8 +103,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context['request'].user
-
         cart = user.cart
+
         order = Order.objects.create(
             user=user,
             address=validated_data.get('address'),
@@ -115,12 +115,26 @@ class OrderSerializer(serializers.ModelSerializer):
         total = 0
 
         for item in cart.items.all():
+
+            # ✅ Check if enough stock is available before placing order
+            if item.product.stock < item.quantity:
+                order.delete()  # rollback the order
+                raise serializers.ValidationError(
+                    f"Insufficient stock for '{item.product.name}'. "
+                    f"Available: {item.product.stock}, Requested: {item.quantity}"
+                )
+
             OrderItem.objects.create(
                 order=order,
                 product=item.product,
                 quantity=item.quantity,
                 price=item.price
             )
+
+            # ✅ Deduct stock after order item is created
+            item.product.stock -= item.quantity
+            item.product.save()
+
             total += item.total_price
 
         order.total_amount = total
