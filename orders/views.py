@@ -244,13 +244,6 @@ class OrderDetailView(APIView):
                 {"message": "Order cancelled and stock restored"},
                 status=status.HTTP_200_OK
             )
-        
-        except Exception as e:
-            print("Error cancelling order:", str(e))
-            return Response(
-                {"message": "An error occurred while cancelling the order"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
         except Order.DoesNotExist:
             return Response(
