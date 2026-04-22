@@ -1,3 +1,5 @@
+from django.http import HttpResponse
+from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -10,8 +12,31 @@ from .models import Appointment
 from .serializers import AppointmentSerializer
 from users.permissions import IsAdminUserRole
 from datetime import date
+import csv
 
 TIME_SLOTS = ["10:00 AM", "11:30 AM", "01:00 PM", "02:30 PM", "04:00 PM", "05:30 PM"]
+
+class UserAppointmentTimeSlotsView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        selected_date = request.query_params.get('date', None)
+        if not selected_date:
+            return Response({'message': 'date query param required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        booked_slots = Appointment.objects.filter(
+            date=selected_date,
+            status__in=['pending', 'confirmed']
+        ).values_list('time_slot', flat=True)
+
+        available_slots = [slot for slot in TIME_SLOTS if slot not in booked_slots]
+
+        return Response({
+            'message': 'Available slots',
+            'date': selected_date,
+            'available_slots': available_slots,
+            'booked_slots': list(booked_slots),
+        }, status=status.HTTP_200_OK)
 
 class AppointmentView(APIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -43,10 +68,11 @@ class AppointmentView(APIView):
 
   
     def post(self, request):
+        data = request.data.copy()
         serializer = AppointmentSerializer(data=request.data)
         if serializer.is_valid():
             user = request.user if request.user.is_authenticated else None
-            appt = serializer.save(user=user)
+            appt = serializer.save(user_id=user.id if user else None)
 
             # Send booking confirmation email
             try:
@@ -78,6 +104,14 @@ class AppointmentDetailView(APIView):
 
     def get_permissions(self):
         return [IsAdminUserRole()]
+    
+    def get(self, request, appointment_id):
+        try:
+            appointment = Appointment.objects.get(id=appointment_id)
+            serializer = AppointmentSerializer(appointment)
+            return Response({'message': 'Appointment details', 'data': serializer.data}, status=status.HTTP_200_OK)
+        except Appointment.DoesNotExist:
+            return Response({'message': 'Appointment not found'}, status=status.HTTP_404_NOT_FOUND)
 
     def patch(self, request, appointment_id):
         try:
@@ -161,7 +195,7 @@ class UserAppointmentListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        appointments = Appointment.objects.filter(user=request.user).order_by('-created_at')
+        appointments = Appointment.objects.filter(email=request.user.email).order_by('-created_at')
         serializer   = AppointmentSerializer(appointments, many=True)
         return Response(
             {'message': 'Your appointments', 'data': serializer.data},
@@ -191,3 +225,57 @@ class AdminAppointmentListView(APIView):
             'cancelled': Appointment.objects.filter(status='cancelled').count(),
             'completed': Appointment.objects.filter(status='completed').count(),
         }, status=status.HTTP_200_OK)
+    
+class AdminAppointmentExportCSVView(APIView):
+    permission_classes = [IsAdminUserRole]
+
+    def get(self, request):
+        appointments = Appointment.objects.all().order_by('-created_at')  # latest first
+
+        # --- Query param filters ---
+        status = request.query_params.get('status')
+        appointment_type = request.query_params.get('appointment_type')
+        date_from = request.query_params.get('date_from')        # format: YYYY-MM-DD
+        date_to = request.query_params.get('date_to')            # format: YYYY-MM-DD
+        search = request.query_params.get('search')              # searches name, email, phone
+
+        if status:
+            appointments = appointments.filter(status=status)
+
+        if appointment_type:
+            appointments = appointments.filter(appointment_type=appointment_type)
+
+        if date_from:
+            appointments = appointments.filter(date__gte=date_from)
+
+        if date_to:
+            appointments = appointments.filter(date__lte=date_to)
+
+        if search:
+            appointments = appointments.filter(
+                Q(customer_name__icontains=search) |
+                Q(email__icontains=search) |
+                Q(phone_number__icontains=search)
+            )
+
+        # --- Build CSV response ---
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="appointments.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Customer Name', 'Email', 'Phone Number', 'Date', 'Time Slot', 'Type', 'Status', 'Created At'])
+
+        for appt in appointments:
+            writer.writerow([
+                appt.id,
+                appt.customer_name,
+                appt.email,
+                appt.phone_number,
+                appt.date.strftime("%Y-%m-%d"),
+                appt.time_slot,
+                appt.appointment_type,
+                appt.status,
+                appt.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            ])
+
+        return response

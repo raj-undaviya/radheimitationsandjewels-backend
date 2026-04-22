@@ -15,11 +15,14 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.urls import path
-from .views import AppointmentView, AppointmentDetailView, AdminAppointmentListView, UserAppointmentListView
+from .views import AppointmentView, \
+    AppointmentDetailView, UserAppointmentListView, UserAppointmentTimeSlotsView, \
+    AdminAppointmentExportCSVView
 
 urlpatterns = [
-    path('',                    AppointmentView.as_view(),          name='appointments'),
-    path('<int:appointment_id>/', AppointmentDetailView.as_view(),  name='appointment-detail'),
-    path('admin/',              AdminAppointmentListView.as_view(),  name='admin-appointments'),
-    path('my/',                 UserAppointmentListView.as_view(),   name='my-appointments'),
+    path('', AppointmentView.as_view(), name='appointments'),
+    path('time-slots', UserAppointmentTimeSlotsView.as_view(), name='appointment-time-slots'),
+    path('<int:appointment_id>', AppointmentDetailView.as_view(), name='appointment-detail'),
+    path('my', UserAppointmentListView.as_view(), name='my-appointments'),
+    path('export-csv', AdminAppointmentExportCSVView.as_view(), name='admin-appointments-csv'),
 ]
