@@ -601,9 +601,11 @@ class AdminCouponDetailView(APIView):
                 {"message": "Coupon not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        coupon.delete()
+        coupon.status = 'inactive'  # ✅ Soft delete by marking as inactive
+        coupon.save()
+        # coupon.delete()
         return Response(
-            {"message": "Coupon deleted successfully"},
+            {"message": "Coupon marked as inactive successfully"},
             status=status.HTTP_204_NO_CONTENT
         )
 
