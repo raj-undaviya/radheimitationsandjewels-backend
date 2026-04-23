@@ -464,7 +464,7 @@ class AdminUsersView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserRole]
     def get(self, request):
 
-        users = User.objects.all().values('id', 'email', 'role', 'date_joined', 'username', 'first_name', 'last_name', 'phone_number').order_by('-date_joined')
+        users = User.objects.all().values('id', 'email', 'role', 'date_joined', 'username', 'first_name', 'last_name', 'phonenumber').order_by('-date_joined')
         total_users = users.count()
 
         return Response(

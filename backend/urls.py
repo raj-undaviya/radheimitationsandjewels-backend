@@ -46,9 +46,9 @@ urlpatterns = [
     path('api/admin-panel/policies/<int:policy_id>/', AdminPolicyDetailView.as_view(), name='admin-policy-detail'),
     path('api/admin-panel/policies/audit/', AdminPolicyAuditView.as_view(), name='admin-policy-audit'),
     path('api/admin-panel/sales-performance/', SalesPerformanceView.as_view(), name='sales-performance'),
-    path('api/admin-panel/reports/performance/',      PerformanceReportView.as_view(),      name='report-performance'),
-    path('api/admin-panel/reports/sales-analytics/',  SalesAnalyticsReportView.as_view(),   name='report-sales-analytics'),
-    path('api/admin-panel/reports/order-processing/', OrderProcessingReportView.as_view(),  name='report-order-processing'),
-    path('api/admin-panel/reports/client-insights/',  ClientInsightsReportView.as_view(),   name='report-client-insights'),
+    path('api/admin-panel/reports/performance/', PerformanceReportView.as_view(), name='report-performance'),
+    path('api/admin-panel/reports/sales-analytics/', SalesAnalyticsReportView.as_view(), name='report-sales-analytics'),
+    path('api/admin-panel/reports/order-processing/', OrderProcessingReportView.as_view(), name='report-order-processing'),
+    path('api/admin-panel/reports/client-insights/', ClientInsightsReportView.as_view(), name='report-client-insights'),
 
 ]
