@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cart, CartItem, Wishlist, Order, OrderItem
+from .models import Cart, CartItem, Coupon, Wishlist, Order, OrderItem
 from products.models import Product
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -59,7 +59,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_details', 'quantity', 'price', 'total_price']
 
     def get_product_details(self, obj):
-        print("Getting product details for OrderItem:", obj.product)
+        print("Getting product details for OrderItem:", obj.product.id)
         image = obj.product.images.first()
         return {
             "id": obj.product.id if obj.product else None,
@@ -68,34 +68,40 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "image": image.image_url.url if image and image.image_url else None
         }
     
+# serializers.py
 class OrderSerializer(serializers.ModelSerializer):
 
-    items = OrderItemSerializer(many=True, read_only=True)
+    items        = OrderItemSerializer(many=True, read_only=True)
     total_amount = serializers.ReadOnlyField()
+    coupon_code = serializers.CharField(write_only=True, required=False)  # ✅
 
     class Meta:
-        model = Order
+        model  = Order
         fields = [
             'id',
             'user',
             'items',
             'total_amount',
             'status',
+            'payment_method',       # ✅ new
+            'payment_status',       # ✅ new
+            'razorpay_order_id',    # ✅ new
+            'razorpay_payment_id',  # ✅ new
             'address',
             'city',
             'pincode',
-            'created_at'
+            'created_at',
+            'coupon_code',      # ✅ write only — for input
+            'discount_amount',  # ✅ read only — saved on order
         ]
-        read_only_fields = ['user', 'status', 'total_amount']
+        read_only_fields = ['user', 'status', 'total_amount', 'payment_status', 'razorpay_order_id']
 
     def validate(self, data):
         user = self.context['request'].user
 
-        # check cart exists
         if not hasattr(user, 'cart'):
             raise serializers.ValidationError("Cart not found")
 
-        # check cart items
         if not user.cart.items.exists():
             raise serializers.ValidationError("Cart is empty")
 
@@ -104,42 +110,97 @@ class OrderSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context['request'].user
         cart = user.cart
+        coupon_code = validated_data.pop('coupon_code', None)
 
         order = Order.objects.create(
-            user=user,
-            address=validated_data.get('address'),
-            city=validated_data.get('city'),
-            pincode=validated_data.get('pincode')
+            user           = user,
+            address        = validated_data.get('address'),
+            city           = validated_data.get('city'),
+            pincode        = validated_data.get('pincode'),
+            payment_method = validated_data.get('payment_method', 'cod'),  # ✅
         )
 
         total = 0
-
         for item in cart.items.all():
-
-            # ✅ Check if enough stock is available before placing order
             if item.product.stock < item.quantity:
-                order.delete()  # rollback the order
+                order.delete()
                 raise serializers.ValidationError(
                     f"Insufficient stock for '{item.product.name}'. "
                     f"Available: {item.product.stock}, Requested: {item.quantity}"
                 )
-
             OrderItem.objects.create(
-                order=order,
-                product=item.product,
-                quantity=item.quantity,
-                price=item.price
+                order    = order,
+                product  = item.product,
+                quantity = item.quantity,
+                price    = item.price
             )
-
-            # ✅ Deduct stock after order item is created
             item.product.stock -= item.quantity
             item.product.save()
-
             total += item.total_price
 
-        order.total_amount = total
-        order.save()
+        discount = 0
+        if coupon_code:
+            try:
+                coupon = Coupon.objects.get(code=coupon_code.upper())
+                if coupon.is_valid and total >= coupon.min_order_value:
+                    if coupon.type == 'percentage':
+                        discount = round((total * coupon.value) / 100, 2)
+                    else:
+                        discount = min(coupon.value, total)
 
-        cart.items.all().delete()  # clear cart after order
+                    # ✅ Increment usage count
+                    coupon.used_count += 1
+                    coupon.save()
+            except Coupon.DoesNotExist:
+                pass
+
+        order.total_amount = round(total - discount, 2)
+        order.discount_amount = discount   # ✅ save discount
+        order.save()
+        cart.items.all().delete()
 
         return order
+    
+class CouponSerializer(serializers.ModelSerializer):
+
+    usage_percentage = serializers.SerializerMethodField(read_only=True)
+    is_valid         = serializers.ReadOnlyField()
+
+    class Meta:
+        model  = Coupon
+        fields = [
+            'id',
+            'code',
+            'type',
+            'value',
+            'max_usage',
+            'used_count',
+            'usage_percentage',
+            'min_order_value',
+            'expiry_date',
+            'status',
+            'is_valid',
+            'created_at',
+        ]
+        read_only_fields = ['used_count', 'created_at']
+
+    def get_usage_percentage(self, obj):
+        if obj.max_usage == 0:
+            return 0
+        return round((obj.used_count / obj.max_usage) * 100, 2)
+
+    def validate_code(self, value):
+        # ✅ Always store coupon codes in uppercase
+        return value.upper()
+
+    def validate_value(self, value):
+        # ✅ Percentage can't exceed 100
+        coupon_type = self.initial_data.get('type')
+        if coupon_type == 'percentage' and value > 100:
+            raise serializers.ValidationError("Percentage discount cannot exceed 100%")
+        return value
+
+
+class ApplyCouponSerializer(serializers.Serializer):
+    code        = serializers.CharField()
+    cart_total  = serializers.DecimalField(max_digits=10, decimal_places=2)

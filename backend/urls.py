@@ -18,7 +18,9 @@ from django.contrib import admin
 from django.urls import include, path
 
 from appointments.views import AdminAppointmentListView
-from orders.views import AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, AdminTopProductsView, AdminUsersView
+from orders.views import AdminCouponDetailView, AdminCouponToggleStatusView, AdminCouponToggleStatusView, \
+    AdminCouponView, AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, \
+    AdminTopProductsView, AdminUsersView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -35,5 +37,9 @@ urlpatterns = [
     path('api/admin-panel/users', AdminUsersView.as_view()),
     path('api/admin-panel/top-products', AdminTopProductsView.as_view()),
     path('api/admin-panel/appointments', AdminAppointmentListView.as_view()),
+    path('api/admin-panel/coupons/',                    AdminCouponView.as_view(),             name='admin-coupons'),
+    path('api/admin-panel/coupons/<int:coupon_id>/',    AdminCouponDetailView.as_view(),       name='admin-coupon-detail'),
+    path('api/admin-panel/coupons/<int:coupon_id>/toggle-status/', AdminCouponToggleStatusView.as_view(), name='admin-coupon-toggle'),
+
 
 ]
