@@ -3,8 +3,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import authenticate
 from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.permissions import IsAuthenticated
+from users.permissions import IsAdminUserRole
+import cloudinary.uploader
 from .models import User, PasswordResetOTP
-from .serializers import AuthenticateSerializer, AuthenticateSerializerWithToken
+from .serializers import AuthenticateSerializer, AuthenticateSerializerWithToken, AdminProfileSerializer, ChangePasswordSerializer
 import random
 from datetime import datetime
 from django.core.mail import send_mail
@@ -245,3 +249,119 @@ class CustomersDetailView(APIView):
             return Response({'message': 'Customer deleted successfully'}, status=status.HTTP_200_OK)
         except User.DoesNotExist:
             return Response({'message': 'Customer not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+class AdminProfileView(APIView):
+    """
+    GET  — fetch logged-in admin's profile
+    PUT  — update profile fields
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        serializer = AdminProfileSerializer(request.user)
+        return Response(
+            {
+                "message": "Admin profile retrieved successfully",
+                "data":    serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def put(self, request):
+        data          = request.data.copy()
+        profile_image = request.FILES.get('profile_image')
+
+        # ✅ Upload new profile image to Cloudinary if provided
+        if profile_image:
+            try:
+                upload_result     = cloudinary.uploader.upload(
+                    profile_image,
+                    folder          = "admin_profiles/",
+                    transformation = [{"width": 400, "height": 400, "crop": "fill", "gravity": "face"}]
+                )
+                data['profile_image'] = upload_result['secure_url']
+            except Exception as e:
+                return Response(
+                    {"message": f"Image upload failed: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        serializer = AdminProfileSerializer(request.user, data=data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    "message": "Profile updated successfully",
+                    "data":    serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            {
+                "message": "Profile update failed",
+                "errors":  serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class AdminChangePasswordView(APIView):
+    """
+    POST — change password for logged-in admin
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"message": "Validation failed", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user             = request.user
+        current_password = serializer.validated_data['current_password']
+        new_password     = serializer.validated_data['new_password']
+
+        # ✅ Verify current password
+        if not user.check_password(current_password):
+            return Response(
+                {"message": "Current password is incorrect"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Prevent reusing same password
+        if user.check_password(new_password):
+            return Response(
+                {"message": "New password must be different from current password"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            {"message": "Password changed successfully. Please login again."},
+            status=status.HTTP_200_OK
+        )
+
+
+class AdminProfileImageDeleteView(APIView):
+    """
+    DELETE — remove profile image and reset to null
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def delete(self, request):
+        user              = request.user
+        user.profile_image = None
+        user.save()
+
+        return Response(
+            {"message": "Profile image removed successfully"},
+            status=status.HTTP_200_OK
+        )

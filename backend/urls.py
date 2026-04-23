@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 from appointments.views import AdminAppointmentListView
+from users.views import AdminChangePasswordView, AdminProfileImageDeleteView, AdminProfileView
 from policies.views import AdminPolicyAuditView, AdminPolicyDetailView, AdminPolicyView
 from orders.views import AdminCouponDetailView, AdminCouponToggleStatusView, AdminCouponToggleStatusView, \
     AdminCouponView, AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, \
@@ -31,7 +32,12 @@ urlpatterns = [
     path('api/products/', include('products.urls')),
     path('api/appointments/', include('appointments.urls')),
     path('api/policies/', include('policies.urls')),
+
+
     # ====== Admin Panel URLs ======
+    path('api/admin/profile/', AdminProfileView.as_view(), name='admin-profile'),
+    path('api/admin/profile/change-password/', AdminChangePasswordView.as_view(),   name='admin-change-password'),
+    path('api/admin/profile/remove-image/',  AdminProfileImageDeleteView.as_view(), name='admin-remove-image'),
     path('api/admin-panel/dashboard', AdminDashboardView.as_view()),
     path('api/admin-panel/orders', AdminOrderListView.as_view()),
     path('api/admin-panel/orders/<int:order_id>/status', AdminOrderUpdateStatusView.as_view()),

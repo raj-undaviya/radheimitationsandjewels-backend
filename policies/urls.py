@@ -7,5 +7,5 @@ from .views import (
 
 urlpatterns = [
     # Public (for your React storefront)
-    path('policies/<str:policy_type>/',            PublicPolicyView.as_view(),      name='public-policy'),
+    path('<str:policy_type>/',            PublicPolicyView.as_view(),      name='public-policy'),
 ]
