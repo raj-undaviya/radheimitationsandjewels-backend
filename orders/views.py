@@ -1,21 +1,26 @@
+import razorpay, hmac, hashlib, csv, io
+from datetime import datetime, timedelta, date
+from django.db.models import Sum, Count, F, Avg
+from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.db.models.functions import TruncDate, TruncMonth, TruncWeek
+from django.utils import timezone
+from django.http import HttpResponse
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 from appointments.models import Appointment
 from appointments.serializers import AppointmentSerializer
 from users.permissions import IsAdminUserRole
 from .models import Cart, CartItem, Coupon, Wishlist, Order, OrderItem
 from .serializers import CartSerializer, CartItemSerializer, WishlistSerializer, \
       OrderSerializer, OrderItemSerializer, CouponSerializer, ApplyCouponSerializer
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.db.models import Sum, Count, F
-from django.contrib.auth import get_user_model
-from rest_framework.permissions import IsAuthenticated
-from datetime import datetime, timedelta
-import razorpay
-import hmac
-import hashlib
-from django.conf import settings
+
 
 User = get_user_model()
 
@@ -459,7 +464,7 @@ class AdminUsersView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserRole]
     def get(self, request):
 
-        users = User.objects.all().values('id', 'email', 'role', 'date_joined', 'username', 'first_name', 'last_name').order_by('-date_joined')
+        users = User.objects.all().values('id', 'email', 'role', 'date_joined', 'username', 'first_name', 'last_name', 'phone_number').order_by('-date_joined')
         total_users = users.count()
 
         return Response(
@@ -692,3 +697,662 @@ class ApplyCouponView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+class SalesPerformanceView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        filter_type  = request.query_params.get('filter', 'this_month')  # default
+        start_date   = request.query_params.get('start_date', None)      # for custom
+        end_date     = request.query_params.get('end_date', None)        # for custom
+
+        today = timezone.now().date()
+
+        # ✅ Determine date range based on filter
+        if filter_type == 'daily':
+            start    = today
+            end      = today
+            trunc_by = TruncDate
+
+        elif filter_type == 'this_month':
+            start    = today.replace(day=1)
+            end      = today
+            trunc_by = TruncDate
+
+        elif filter_type == 'last_3_months':
+            start    = today - timedelta(days=90)
+            end      = today
+            trunc_by = TruncDate
+
+        elif filter_type == 'last_6_months':
+            start    = today - timedelta(days=180)
+            end      = today
+            trunc_by = TruncMonth
+
+        elif filter_type == 'this_year':
+            start    = today.replace(month=1, day=1)
+            end      = today
+            trunc_by = TruncMonth
+
+        elif filter_type == 'custom':
+            if not start_date or not end_date:
+                return Response(
+                    {"message": "Provide start_date and end_date for custom filter (YYYY-MM-DD)"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                end   = datetime.strptime(end_date,   '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {"message": "Invalid date format. Use YYYY-MM-DD"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            # auto pick grouping based on range
+            delta = (end - start).days
+            if delta <= 31:
+                trunc_by = TruncDate
+            elif delta <= 180:
+                trunc_by = TruncDate
+            else:
+                trunc_by = TruncMonth
+
+        else:
+            return Response(
+                {"message": "Invalid filter. Use: daily, this_month, last_3_months, last_6_months, this_year, custom"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Query — Revenue (orange solid line)
+        revenue_data = (
+            Order.objects
+            .filter(created_at__date__gte=start, created_at__date__lte=end)
+            .annotate(period=trunc_by('created_at'))
+            .values('period')
+            .annotate(revenue=Sum('total_amount'))
+            .order_by('period')
+        )
+
+        # ✅ Query — Orders count (grey dashed line)
+        orders_data = (
+            Order.objects
+            .filter(created_at__date__gte=start, created_at__date__lte=end)
+            .annotate(period=trunc_by('created_at'))
+            .values('period')
+            .annotate(orders=Count('id'))
+            .order_by('period')
+        )
+
+        # ✅ Merge both into one chart-ready list
+        revenue_map = {
+            str(item['period'].strftime('%Y-%m-%d') if hasattr(item['period'], 'strftime') else item['period']): float(item['revenue'] or 0)
+            for item in revenue_data
+        }
+        orders_map = {
+            str(item['period'].strftime('%Y-%m-%d') if hasattr(item['period'], 'strftime') else item['period']): item['orders']
+            for item in orders_data
+        }
+
+        # ✅ Build combined data points
+        all_periods = sorted(set(list(revenue_map.keys()) + list(orders_map.keys())))
+
+        chart_data = [
+            {
+                "period":  period,
+                "revenue": revenue_map.get(period, 0),   # orange solid line
+                "orders":  orders_map.get(period, 0),    # grey dashed line
+            }
+            for period in all_periods
+        ]
+
+        # ✅ Summary stats for the selected period
+        total_revenue = sum(item['revenue'] for item in chart_data)
+        total_orders  = sum(item['orders']  for item in chart_data)
+        avg_order_value = round(total_revenue / total_orders, 2) if total_orders > 0 else 0
+
+        # ✅ Previous period comparison (for % change)
+        period_days   = (end - start).days or 1
+        prev_start    = start - timedelta(days=period_days)
+        prev_end      = start - timedelta(days=1)
+
+        prev_revenue = (
+            Order.objects
+            .filter(created_at__date__gte=prev_start, created_at__date__lte=prev_end)
+            .aggregate(total=Sum('total_amount'))['total'] or 0
+        )
+
+        revenue_change = 0
+        if prev_revenue > 0:
+            revenue_change = round(((total_revenue - float(prev_revenue)) / float(prev_revenue)) * 100, 2)
+
+        return Response(
+            {
+                "message": "Sales performance data",
+                "filter":  filter_type,
+                "period": {
+                    "start": str(start),
+                    "end":   str(end),
+                },
+                "summary": {
+                    "total_revenue":    round(total_revenue, 2),
+                    "total_orders":     total_orders,
+                    "avg_order_value":  avg_order_value,
+                    "revenue_change":   revenue_change,   # % vs previous period
+                },
+                "chart_data": chart_data,   # ✅ feed this directly to your chart
+            },
+            status=status.HTTP_200_OK
+        )
+    
+def get_date_range(period):
+    today = timezone.now().date()
+
+    if period == 'current_month':
+        start = today.replace(day=1)
+        end   = today
+    elif period == 'last_30_days':
+        start = today - timedelta(days=30)
+        end   = today
+    elif period == 'last_3_months':
+        start = today - timedelta(days=90)
+        end   = today
+    elif period == 'last_6_months':
+        start = today - timedelta(days=180)
+        end   = today
+    elif period == 'this_year':
+        start = today.replace(month=1, day=1)
+        end   = today
+    else:
+        start = today - timedelta(days=30)
+        end   = today
+
+    return start, end
+
+
+# ─── Helper: Currency multiplier ──────────────────────────────────────────────
+def get_currency_multiplier(currency):
+    # Simple static rates — replace with live API if needed
+    rates = {
+        'INR': 1,
+        'USD': 0.012,
+        'EUR': 0.011,
+        'GBP': 0.0095,
+    }
+    return rates.get(currency, 1)
+
+
+# ─── 1. Performance Report Summary (Top Cards) ───────────────────────────────
+class PerformanceReportView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        period   = request.query_params.get('period', 'last_30_days')
+        currency = request.query_params.get('currency', 'INR')
+
+        start, end    = get_date_range(period)
+        multiplier    = get_currency_multiplier(currency)
+
+        # Previous period for growth comparison
+        delta      = (end - start).days or 1
+        prev_start = start - timedelta(days=delta)
+        prev_end   = start - timedelta(days=1)
+
+        # ✅ Current period
+        current_orders  = Order.objects.filter(
+            created_at__date__gte=start,
+            created_at__date__lte=end
+        )
+        total_sales     = float(current_orders.aggregate(t=Sum('total_amount'))['t'] or 0) * multiplier
+        total_orders    = current_orders.count()
+        avg_order_value = float(current_orders.aggregate(a=Avg('total_amount'))['a'] or 0) * multiplier
+
+        # ✅ Previous period
+        prev_orders      = Order.objects.filter(
+            created_at__date__gte=prev_start,
+            created_at__date__lte=prev_end
+        )
+        prev_sales       = float(prev_orders.aggregate(t=Sum('total_amount'))['t'] or 0) * multiplier
+        prev_avg         = float(prev_orders.aggregate(a=Avg('total_amount'))['a'] or 0) * multiplier
+
+        # ✅ Growth rate
+        growth_rate = 0
+        if prev_sales > 0:
+            growth_rate = round(((total_sales - prev_sales) / prev_sales) * 100, 1)
+
+        avg_change = 0
+        if prev_avg > 0:
+            avg_change = round(((avg_order_value - prev_avg) / prev_avg) * 100, 1)
+
+        # ✅ Avg order value trend
+        avg_trend = "stable"
+        if avg_change > 5:
+            avg_trend = "up"
+        elif avg_change < -5:
+            avg_trend = "down"
+
+        return Response(
+            {
+                "message": "Performance report",
+                "period":  {"start": str(start), "end": str(end)},
+                "currency": currency,
+                "data": {
+                    "total_sales": {
+                        "value":  round(total_sales, 2),
+                        "change": growth_rate,          # e.g. +12.4%
+                        "trend":  "up" if growth_rate >= 0 else "down"
+                    },
+                    "growth_rate": {
+                        "value":  growth_rate,          # e.g. 18.5%
+                        "change": round(growth_rate - (prev_sales / max(prev_sales, 1) * 100), 1),
+                        "trend":  "up" if growth_rate >= 0 else "down"
+                    },
+                    "avg_order_value": {
+                        "value":  round(avg_order_value, 2),
+                        "change": avg_change,
+                        "trend":  avg_trend             # "stable" / "up" / "down"
+                    },
+                }
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+# ─── 2. Sales Analytics Report (Generate + Download) ─────────────────────────
+class SalesAnalyticsReportView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        period      = request.query_params.get('period', 'current_month')
+        category_id = request.query_params.get('category', None)
+        currency    = request.query_params.get('currency', 'INR')
+        download    = request.query_params.get('download', None)   # 'csv' or 'pdf'
+
+        start, end   = get_date_range(period)
+        multiplier   = get_currency_multiplier(currency)
+
+        # ✅ Base queryset
+        orders = Order.objects.filter(
+            created_at__date__gte=start,
+            created_at__date__lte=end
+        )
+
+        # ✅ Filter by category if provided
+        if category_id:
+            orders = orders.filter(items__product__category__id=category_id)
+
+        # ✅ Build report rows
+        report_data = (
+            orders
+            .annotate(period=TruncDate('created_at'))
+            .values('period')
+            .annotate(
+                total_revenue = Sum('total_amount'),
+                total_orders  = Count('id'),
+                avg_value     = Avg('total_amount')
+            )
+            .order_by('period')
+        )
+
+        rows = [
+            {
+                "date":          str(item['period']),
+                "total_revenue": round(float(item['total_revenue'] or 0) * multiplier, 2),
+                "total_orders":  item['total_orders'],
+                "avg_value":     round(float(item['avg_value'] or 0) * multiplier, 2),
+                "currency":      currency,
+            }
+            for item in report_data
+        ]
+
+        # ✅ Download CSV
+        if download == 'csv':
+            return self._download_csv(rows, currency)
+
+        # ✅ Download PDF
+        if download == 'pdf':
+            return self._download_pdf(rows, currency, start, end)
+
+        # ✅ JSON response
+        return Response(
+            {
+                "message":    "Sales analytics report",
+                "period":     {"start": str(start), "end": str(end)},
+                "currency":   currency,
+                "total_rows": len(rows),
+                "data":       rows,
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def _download_csv(self, rows, currency):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="sales_report.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['Date', f'Total Revenue ({currency})', 'Total Orders', f'Avg Order Value ({currency})'])
+
+        for row in rows:
+            writer.writerow([
+                row['date'],
+                row['total_revenue'],
+                row['total_orders'],
+                row['avg_value'],
+            ])
+
+        return response
+
+    def _download_pdf(self, rows, currency, start, end):
+        buffer   = io.BytesIO()
+        doc      = SimpleDocTemplate(buffer, pagesize=letter)
+        styles   = getSampleStyleSheet()
+        elements = []
+
+        # Title
+        elements.append(Paragraph("Sales Analytics Report", styles['Title']))
+        elements.append(Paragraph(f"Period: {start} to {end} | Currency: {currency}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+
+        # Table
+        table_data = [[
+            'Date',
+            f'Revenue ({currency})',
+            'Orders',
+            f'Avg Value ({currency})'
+        ]]
+        for row in rows:
+            table_data.append([
+                row['date'],
+                str(row['total_revenue']),
+                str(row['total_orders']),
+                str(row['avg_value']),
+            ])
+
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F97316')),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FFF7ED')]),
+            ('GRID',       (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE',   (0, 0), (-1, -1), 9),
+            ('PADDING',    (0, 0), (-1, -1), 6),
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="sales_report.pdf"'
+        return response
+
+
+# ─── 3. Order Processing Report ───────────────────────────────────────────────
+class OrderProcessingReportView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        period   = request.query_params.get('period', 'last_30_days')
+        download = request.query_params.get('download', None)
+
+        start, end = get_date_range(period)
+
+        # ✅ Pending fulfillment
+        pending_orders = Order.objects.filter(
+            status='pending'
+        )
+        pending_count = pending_orders.count()
+
+        # ✅ Return requests (cancelled orders)
+        return_requests = Order.objects.filter(
+            status='cancelled',
+            created_at__date__gte=start,
+            created_at__date__lte=end
+        ).count()
+
+        # ✅ Detailed pending orders list
+        pending_list = Order.objects.filter(status='pending').values(
+            'id',
+            'user__email',
+            'total_amount',
+            'payment_method',
+            'created_at',
+            'city',
+        ).order_by('-created_at')[:50]
+
+        rows = list(pending_list)
+
+        if download == 'csv':
+            return self._download_csv(rows)
+
+        if download == 'pdf':
+            return self._download_pdf(rows, start, end)
+
+        return Response(
+            {
+                "message": "Order processing report",
+                "period":  {"start": str(start), "end": str(end)},
+                "data": {
+                    "pending_fulfillment": {
+                        "count": pending_count,
+                        "label": f"{pending_count} Orders"
+                    },
+                    "return_requests": {
+                        "count": return_requests,
+                        "label": f"{return_requests} Cases"
+                    },
+                },
+                "pending_orders": rows
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def _download_csv(self, rows):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="order_processing_report.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['Order ID', 'Customer Email', 'Total Amount', 'Payment Method', 'City', 'Created At'])
+        for row in rows:
+            writer.writerow([
+                row['id'],
+                row['user__email'],
+                row['total_amount'],
+                row['payment_method'],
+                row['city'],
+                str(row['created_at']),
+            ])
+        return response
+
+    def _download_pdf(self, rows, start, end):
+        buffer   = io.BytesIO()
+        doc      = SimpleDocTemplate(buffer, pagesize=letter)
+        styles   = getSampleStyleSheet()
+        elements = []
+
+        elements.append(Paragraph("Order Processing Report", styles['Title']))
+        elements.append(Paragraph(f"Period: {start} to {end}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+
+        table_data = [['Order ID', 'Customer', 'Amount', 'Payment', 'City']]
+        for row in rows:
+            table_data.append([
+                str(row['id']),
+                str(row['user__email']),
+                str(row['total_amount']),
+                str(row['payment_method']),
+                str(row['city']),
+            ])
+
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F97316')),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FFF7ED')]),
+            ('GRID',       (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE',   (0, 0), (-1, -1), 9),
+            ('PADDING',    (0, 0), (-1, -1), 6),
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="order_processing_report.pdf"'
+        return response
+
+
+# ─── 4. Client Insights Report ────────────────────────────────────────────────
+class ClientInsightsReportView(APIView):
+
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        period   = request.query_params.get('period', 'last_30_days')
+        download = request.query_params.get('download', None)
+
+        start, end   = get_date_range(period)
+        delta        = (end - start).days or 1
+        prev_start   = start - timedelta(days=delta)
+        prev_end     = start - timedelta(days=1)
+
+        # ✅ High Net Worth Clients — users who spent > ₹10,000 total
+        HNW_THRESHOLD = 10000
+
+        hnw_current = (
+            User.objects
+            .annotate(total_spent=Sum('orders__total_amount'))
+            .filter(
+                total_spent__gte=HNW_THRESHOLD,
+                orders__created_at__date__gte=start,
+                orders__created_at__date__lte=end
+            )
+            .distinct()
+            .count()
+        )
+
+        hnw_prev = (
+            User.objects
+            .annotate(total_spent=Sum('orders__total_amount'))
+            .filter(
+                total_spent__gte=HNW_THRESHOLD,
+                orders__created_at__date__gte=prev_start,
+                orders__created_at__date__lte=prev_end
+            )
+            .distinct()
+            .count()
+        )
+
+        hnw_new = hnw_current - hnw_prev
+
+        # ✅ Retention Rate
+        # Users who ordered in previous period AND current period
+        prev_buyers = set(
+            Order.objects
+            .filter(created_at__date__gte=prev_start, created_at__date__lte=prev_end)
+            .values_list('user_id', flat=True)
+        )
+        current_buyers = set(
+            Order.objects
+            .filter(created_at__date__gte=start, created_at__date__lte=end)
+            .values_list('user_id', flat=True)
+        )
+
+        retained       = len(prev_buyers & current_buyers)
+        retention_rate = round((retained / max(len(prev_buyers), 1)) * 100, 1)
+
+        # ✅ Top clients list
+        top_clients = (
+            User.objects
+            .annotate(
+                total_spent  = Sum('orders__total_amount'),
+                total_orders = Count('orders')
+            )
+            .filter(total_spent__isnull=False)
+            .order_by('-total_spent')[:20]
+            .values('id', 'email', 'total_spent', 'total_orders')
+        )
+
+        rows = list(top_clients)
+
+        if download == 'csv':
+            return self._download_csv(rows)
+
+        if download == 'pdf':
+            return self._download_pdf(rows, start, end, retention_rate)
+
+        return Response(
+            {
+                "message": "Client insights report",
+                "period":  {"start": str(start), "end": str(end)},
+                "data": {
+                    "high_net_worth_clients": {
+                        "count": hnw_current,
+                        "new":   f"+{hnw_new} New" if hnw_new >= 0 else str(hnw_new)
+                    },
+                    "retention_rate": {
+                        "value": retention_rate,
+                        "label": f"{retention_rate}%"
+                    },
+                },
+                "top_clients": rows
+            },
+            status=status.HTTP_200_OK
+        )
+
+    def _download_csv(self, rows):
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="client_insights_report.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['Customer Email', 'Total Spent (INR)', 'Total Orders'])
+        for row in rows:
+            writer.writerow([
+                row['email'],
+                row['total_spent'],
+                row['total_orders'],
+            ])
+        return response
+
+    def _download_pdf(self, rows, start, end, retention_rate):
+        buffer   = io.BytesIO()
+        doc      = SimpleDocTemplate(buffer, pagesize=letter)
+        styles   = getSampleStyleSheet()
+        elements = []
+
+        elements.append(Paragraph("Client Insights Report", styles['Title']))
+        elements.append(Paragraph(f"Period: {start} to {end} | Retention Rate: {retention_rate}%", styles['Normal']))
+        elements.append(Spacer(1, 20))
+
+        table_data = [['Email', 'Total Spent (INR)', 'Total Orders']]
+        for row in rows:
+            table_data.append([
+                str(row['email']),
+                str(row['total_spent']),
+                str(row['total_orders']),
+            ])
+
+        table = Table(table_data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F97316')),
+            ('TEXTCOLOR',  (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',   (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FFF7ED')]),
+            ('GRID',       (0, 0), (-1, -1), 0.5, colors.grey),
+            ('FONTSIZE',   (0, 0), (-1, -1), 9),
+            ('PADDING',    (0, 0), (-1, -1), 6),
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = 'attachment; filename="client_insights_report.pdf"'
+        return response
