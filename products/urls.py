@@ -18,7 +18,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from .views import ProductView, ProductDetailView, CategoryView, SubCategoryDetailView, SubCategoryView, CategoryDetailView
+from .views import ProductBulkCSVUploadView, ProductView, ProductDetailView, CategoryView, \
+      SubCategoryDetailView, SubCategoryView, CategoryDetailView, ProductImageUploadView
 
 urlpatterns = [
     path('', ProductView.as_view(), name='product'),
@@ -27,6 +28,8 @@ urlpatterns = [
     path('category/<int:category_id>', CategoryDetailView.as_view(), name='category-detail'),
     path('subcategory', SubCategoryView.as_view(), name='subcategory'),
     path('subcategory/<int:subcategory_id>', SubCategoryDetailView.as_view(), name='subcategory-detail'),
+    path('bulk-upload/',   ProductBulkCSVUploadView.as_view(), name='product-bulk-upload'),
+    path('upload-images/', ProductImageUploadView.as_view(),   name='product-image-upload'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
