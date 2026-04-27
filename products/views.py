@@ -357,33 +357,33 @@ class ProductBulkCSVUploadView(APIView):
             'image_url_5',
         ])
 
-        # ✅ Example rows so admin understands the format
-        writer.writerow([
-            'Gold Necklace',
-            'Beautiful 22kt gold necklace with stone work',
-            '1499.00',
-            '25',
-            'Jewellery',       # exact category name from your DB
-            'Necklaces',       # exact subcategory name under that category
-            'https://example.com/gold_necklace_1.jpg',
-            'https://example.com/gold_necklace_2.jpg',
-            '',
-            '',
-            '',
-        ])
-        writer.writerow([
-            'Silver Bracelet',
-            'Pure 925 silver bracelet with floral design',
-            '599.00',
-            '50',
-            'Jewellery',
-            'Bracelets',
-            'https://example.com/silver_bracelet_1.jpg',
-            'https://example.com/silver_bracelet_2.jpg',
-            '',
-            '',
-            '',
-        ])
+        # # ✅ Example rows so admin understands the format
+        # writer.writerow([
+        #     'Gold Necklace',
+        #     'Beautiful 22kt gold necklace with stone work',
+        #     '1499.00',
+        #     '25',
+        #     'Jewellery',       # exact category name from your DB
+        #     'Necklaces',       # exact subcategory name under that category
+        #     'https://example.com/gold_necklace_1.jpg',
+        #     'https://example.com/gold_necklace_2.jpg',
+        #     '',
+        #     '',
+        #     '',
+        # ])
+        # writer.writerow([
+        #     'Silver Bracelet',
+        #     'Pure 925 silver bracelet with floral design',
+        #     '599.00',
+        #     '50',
+        #     'Jewellery',
+        #     'Bracelets',
+        #     'https://example.com/silver_bracelet_1.jpg',
+        #     'https://example.com/silver_bracelet_2.jpg',
+        #     '',
+        #     '',
+        #     '',
+        # ])
 
         # ✅ 8 blank rows for admin to fill
         for _ in range(8):
