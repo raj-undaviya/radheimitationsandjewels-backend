@@ -4,8 +4,9 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
 
 from appointments.serializers import AppointmentSerializer
+from appointments.models import Appointment
 from products.models import Product, Category, SubCategory
-from orders.models import Order, Appointment
+from orders.models import Order
 from products.serializers import ProductSerializer, CategorySerializer, SubCategorySerializer
 from orders.serializers import OrderSerializer
 
