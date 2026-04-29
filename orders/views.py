@@ -20,7 +20,7 @@ from users.permissions import IsAdminUserRole
 from .models import Cart, CartItem, Coupon, Wishlist, Order, OrderItem
 from .serializers import CartSerializer, CartItemSerializer, WishlistSerializer, \
       OrderSerializer, OrderItemSerializer, CouponSerializer, ApplyCouponSerializer
-
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -1355,4 +1355,231 @@ class ClientInsightsReportView(APIView):
 
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = 'attachment; filename="client_insights_report.pdf"'
+        return response
+
+class PaymentStatsView(APIView):
+    """
+    GET /api/payments/stats/
+    Summary cards: Total Revenue, Today's Collections, Pending Transactions, Success Rate
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.now().date()
+
+        # Total Revenue (all paid orders)
+        total_revenue = Order.objects.filter(
+            payment_status='paid'
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+
+        # Today's Collections
+        todays_collections = Order.objects.filter(
+            payment_status='paid',
+            created_at__date=today
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+
+        # Pending Transactions count
+        pending_count = Order.objects.filter(
+            payment_status='pending',
+            payment_method='online'
+        ).count()
+
+        # Success Rate
+        total_online = Order.objects.filter(payment_method='online').count()
+        total_paid   = Order.objects.filter(
+            payment_method='online',
+            payment_status='paid'
+        ).count()
+
+        success_rate = (
+            round((total_paid / total_online) * 100, 1)
+            if total_online > 0 else 0
+        )
+
+        return Response({
+            "total_revenue":       total_revenue,
+            "todays_collections":  todays_collections,
+            "pending_transactions": pending_count,
+            "success_rate":        success_rate,
+        })
+
+
+class PaymentListView(APIView):
+    """
+    GET /api/payments/
+    Query params:
+        - days        : 7 | 30 | 90 | all  (default: 30)
+        - method      : cod | online
+        - status      : pending | paid | failed | refunded
+        - page        : page number (default: 1)
+        - page_size   : results per page (default: 10)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = Order.objects.select_related('user').order_by('-created_at')
+
+        # ── Filters ───────────────────────────────────────────────────────
+        days = request.query_params.get('days', '30')
+        if days != 'all':
+            try:
+                delta = timedelta(days=int(days))
+                qs = qs.filter(created_at__gte=timezone.now() - delta)
+            except ValueError:
+                pass
+
+        method = request.query_params.get('method')
+        if method:
+            qs = qs.filter(payment_method=method)
+
+        status = request.query_params.get('status')
+        if status:
+            qs = qs.filter(payment_status=status)
+
+        # ── Pagination ────────────────────────────────────────────────────
+        try:
+            page      = max(1, int(request.query_params.get('page', 1)))
+            page_size = max(1, int(request.query_params.get('page_size', 10)))
+        except ValueError:
+            page, page_size = 1, 10
+
+        total   = qs.count()
+        start   = (page - 1) * page_size
+        end     = start + page_size
+        orders  = qs[start:end]
+
+        data = []
+        for order in orders:
+            data.append({
+                "order_id":         f"#RJ-{order.id}",
+                "customer_name":    order.user.get_full_name() or order.user.username,
+                "customer_avatar":  order.user.profile_image,
+                "date":             order.created_at,
+                "payment_method":   order.payment_method,
+                "amount":           order.total_amount,
+                "payment_status":   order.payment_status,
+                "order_status":     order.status,
+            })
+
+        return Response({
+            "count":     total,
+            "page":      page,
+            "page_size": page_size,
+            "pages":     (total + page_size - 1) // page_size,
+            "results":   data,
+        })
+
+
+class PaymentDetailView(APIView):
+    """
+    GET /api/payments/<order_id>/
+    Transaction detail modal data
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, order_id):
+        try:
+            order = Order.objects.select_related('user').prefetch_related('items__product').get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({"detail": "Transaction not found."}, status=404)
+
+        user = order.user
+
+        items = []
+        for item in order.items.all():
+            items.append({
+                "product_name": item.product.name if item.product else "Deleted Product",
+                "quantity":     item.quantity,
+                "price":        item.price,
+                "total":        item.total_price,
+            })
+
+        return Response({
+            "reference":        f"#RJ-{order.id}",
+            "amount":           order.total_amount,
+            "discount_amount":  order.discount_amount,
+            "status":           order.payment_status,
+            "order_status":     order.status,
+            "date":             order.created_at,
+
+            "customer": {
+                "name":         user.get_full_name() or user.username,
+                "email":        user.email,
+                "phone":        user.phonenumber,
+                "profile_image": user.profile_image,
+            },
+
+            "payment_info": {
+                "method":               order.payment_method,
+                "razorpay_order_id":    order.razorpay_order_id,
+                "razorpay_payment_id":  order.razorpay_payment_id,
+            },
+
+            "billing_address": {
+                "address": order.address,
+                "city":    order.city,
+                "pincode": order.pincode,
+            },
+
+            "items": items,
+        })
+
+
+class PaymentExportView(APIView):
+    """
+    GET /api/payments/export/
+    Returns all payment records as CSV-ready list
+    Same filters as PaymentListView
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import csv
+        from django.http import HttpResponse
+
+        qs = Order.objects.select_related('user').order_by('-created_at')
+
+        days = request.query_params.get('days', '30')
+        if days != 'all':
+            try:
+                delta = timedelta(days=int(days))
+                qs = qs.filter(created_at__gte=timezone.now() - delta)
+            except ValueError:
+                pass
+
+        method = request.query_params.get('method')
+        if method:
+            qs = qs.filter(payment_method=method)
+
+        status = request.query_params.get('status')
+        if status:
+            qs = qs.filter(payment_status=status)
+
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="payments_export.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow([
+            'Order ID', 'Customer Name', 'Email', 'Phone',
+            'Date', 'Payment Method', 'Amount',
+            'Discount', 'Payment Status', 'Order Status',
+            'Razorpay Order ID', 'Razorpay Payment ID',
+        ])
+
+        for order in qs:
+            writer.writerow([
+                f"#RJ-{order.id}",
+                order.user.get_full_name() or order.user.username,
+                order.user.email,
+                order.user.phonenumber,
+                order.created_at.strftime('%b %d, %Y %H:%M'),
+                order.payment_method,
+                order.total_amount,
+                order.discount_amount,
+                order.payment_status,
+                order.status,
+                order.razorpay_order_id or '',
+                order.razorpay_payment_id or '',
+            ])
+
         return response

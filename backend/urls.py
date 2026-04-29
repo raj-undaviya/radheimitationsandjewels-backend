@@ -22,8 +22,8 @@ from users.views import AdminChangePasswordView, AdminProfileImageDeleteView, Ad
 from policies.views import AdminPolicyAuditView, AdminPolicyDetailView, AdminPolicyView
 from orders.views import AdminCouponDetailView, AdminCouponToggleStatusView, AdminCouponToggleStatusView, \
     AdminCouponView, AdminDashboardView, AdminOrderListView, AdminOrderUpdateStatusView, AdminSalesAnalyticsView, \
-    AdminTopProductsView, AdminUsersView, ClientInsightsReportView, OrderProcessingReportView, PerformanceReportView, \
-    SalesAnalyticsReportView, PerformanceReportView, SalesPerformanceView
+    AdminTopProductsView, AdminUsersView, ClientInsightsReportView, OrderProcessingReportView, PaymentExportView, PerformanceReportView, \
+    SalesAnalyticsReportView, PerformanceReportView, SalesPerformanceView, PaymentStatsView, PaymentListView, PaymentDetailView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -57,4 +57,9 @@ urlpatterns = [
     path('api/admin-panel/reports/sales-analytics/', SalesAnalyticsReportView.as_view(), name='report-sales-analytics'),
     path('api/admin-panel/reports/order-processing/', OrderProcessingReportView.as_view(), name='report-order-processing'),
     path('api/admin-panel/reports/client-insights/', ClientInsightsReportView.as_view(), name='report-client-insights'),
+    path('api/admin-panel/payments/stats/', PaymentStatsView.as_view(), name='payment-stats'),
+    path('api/admin-panel/payments/list/', PaymentListView.as_view(), name='payment-list'),
+    path('api/admin-panel/payments/<int:order_id>/', PaymentDetailView.as_view(), name='payment-detail'),
+    path('api/admin-panel/payments/export/', PaymentExportView.as_view(), name='payment-export'),
+
 ]
