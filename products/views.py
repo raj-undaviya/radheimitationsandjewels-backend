@@ -386,8 +386,8 @@ class ProductBulkCSVUploadView(APIView):
         # ])
 
         # ✅ 8 blank rows for admin to fill
-        for _ in range(8):
-            writer.writerow(['', '', '', '', '', '', '', '', '', '', ''])
+        # for _ in range(8):
+        #     writer.writerow(['', '', '', '', '', '', '', '', '', '', ''])
 
         return response
 

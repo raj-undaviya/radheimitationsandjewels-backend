@@ -59,7 +59,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_details', 'quantity', 'price', 'total_price']
 
     def get_product_details(self, obj):
-        print("Getting product details for OrderItem:", obj.product.id)
         image = obj.product.images.first()
         return {
             "id": obj.product.id if obj.product else None,
