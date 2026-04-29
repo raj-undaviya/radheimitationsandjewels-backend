@@ -210,3 +210,33 @@ class AdminPolicyAuditView(APIView):
             {"message": "Update failed", "errors": serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
+    
+class UserPolicyView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        policies = Policy.objects.filter(is_active=True).order_by('-updated_at')
+        serializer = PolicySerializer(policies, many=True)
+        return Response(
+            {"message": "Active policies retrieved", "data": serializer.data},
+            status=status.HTTP_200_OK
+        )
+
+class UserPolicyDetailView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, policy_type):
+        try:
+            policy     = Policy.objects.get(policy_type=policy_type, is_active=True)
+            serializer = PolicySerializer(policy)
+            return Response(
+                {"message": "Policy retrieved", "data": serializer.data},
+                status=status.HTTP_200_OK
+            )
+        except Policy.DoesNotExist:
+            return Response(
+                {"message": "Policy not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
