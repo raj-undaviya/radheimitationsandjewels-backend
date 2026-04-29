@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/products/', include('products.urls')),
     path('api/appointments/', include('appointments.urls')),
     path('api/policies/', include('policies.urls')),
+    path('api/search/', include('search.urls')),
 
 
     # ====== Admin Panel URLs ======
