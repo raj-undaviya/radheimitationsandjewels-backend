@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Cart, CartItem, Coupon, Wishlist, Order, OrderItem
 from products.models import Product
 
+
 class CartItemSerializer(serializers.ModelSerializer):
 
     product_details = serializers.SerializerMethodField()
@@ -10,19 +11,24 @@ class CartItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartItem
         fields = ['id', 'product', 'product_details', 'quantity', 'price', 'total_price']
-        read_only_fields = ['price']   # ✅ FIX
+        read_only_fields = ['price']
 
     def get_product_details(self, obj):
         if not obj.product:
             return None
-        image = obj.product.images.first()
+        try:
+            image = obj.product.images.first()
+            image_url = image.image_url.url if image and image.image_url else None
+        except Exception:
+            image_url = None
         return {
             "id": obj.product.id,
             "name": obj.product.name,
             "price": obj.product.price,
-            "image": image.image_url.url if image and image.image_url else None
+            "image": image_url
         }
-    
+
+
 class CartSerializer(serializers.ModelSerializer):
 
     items = CartItemSerializer(many=True, read_only=True)
@@ -31,6 +37,7 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ['id', 'user', 'items', 'total_price', 'created_at']
+
 
 class WishlistSerializer(serializers.ModelSerializer):
 
@@ -41,14 +48,21 @@ class WishlistSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'product', 'product_details', 'created_at']
 
     def get_product_details(self, obj):
-        image = obj.product.images.first()
+        if not obj.product:
+            return None
+        try:
+            image = obj.product.images.first()
+            image_url = image.image_url.url if image and image.image_url else None
+        except Exception:
+            image_url = None
         return {
             "id": obj.product.id,
             "name": obj.product.name,
             "price": obj.product.price,
-            "image": image.image_url.url if image and image.image_url else None
+            "image": image_url
         }
-    
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
 
     product_details = serializers.SerializerMethodField()
@@ -59,20 +73,26 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_details', 'quantity', 'price', 'total_price']
 
     def get_product_details(self, obj):
-        image = obj.product.images.first()
+        if not obj.product:
+            return None
+        try:
+            image = obj.product.images.first()
+            image_url = image.image_url.url if image and image.image_url else None
+        except Exception:
+            image_url = None
         return {
-            "id": obj.product.id if obj.product else None,
-            "name": obj.product.name if obj.product else None,
+            "id": obj.product.id,
+            "name": obj.product.name,
             "price": obj.price,
-            "image": image.image_url.url if image and image.image_url else None
+            "image": image_url
         }
-    
-# serializers.py
+
+
 class OrderSerializer(serializers.ModelSerializer):
 
     items        = OrderItemSerializer(many=True, read_only=True)
     total_amount = serializers.ReadOnlyField()
-    coupon_code = serializers.CharField(write_only=True, required=False)  # ✅
+    coupon_code  = serializers.CharField(write_only=True, required=False)
 
     class Meta:
         model  = Order
@@ -82,16 +102,16 @@ class OrderSerializer(serializers.ModelSerializer):
             'items',
             'total_amount',
             'status',
-            'payment_method',       # ✅ new
-            'payment_status',       # ✅ new
-            'razorpay_order_id',    # ✅ new
-            'razorpay_payment_id',  # ✅ new
+            'payment_method',
+            'payment_status',
+            'razorpay_order_id',
+            'razorpay_payment_id',
             'address',
             'city',
             'pincode',
             'created_at',
-            'coupon_code',      # ✅ write only — for input
-            'discount_amount',  # ✅ read only — saved on order
+            'coupon_code',
+            'discount_amount',
         ]
         read_only_fields = ['user', 'status', 'total_amount', 'payment_status', 'razorpay_order_id']
 
@@ -116,7 +136,7 @@ class OrderSerializer(serializers.ModelSerializer):
             address        = validated_data.get('address'),
             city           = validated_data.get('city'),
             pincode        = validated_data.get('pincode'),
-            payment_method = validated_data.get('payment_method', 'cod'),  # ✅
+            payment_method = validated_data.get('payment_method', 'cod'),
         )
 
         total = 0
@@ -147,19 +167,19 @@ class OrderSerializer(serializers.ModelSerializer):
                     else:
                         discount = min(coupon.value, total)
 
-                    # ✅ Increment usage count
                     coupon.used_count += 1
                     coupon.save()
             except Coupon.DoesNotExist:
                 pass
 
-        order.total_amount = round(total - discount, 2)
-        order.discount_amount = discount   # ✅ save discount
+        order.total_amount   = round(total - discount, 2)
+        order.discount_amount = discount
         order.save()
         cart.items.all().delete()
 
         return order
-    
+
+
 class CouponSerializer(serializers.ModelSerializer):
 
     usage_percentage = serializers.SerializerMethodField(read_only=True)
@@ -189,11 +209,9 @@ class CouponSerializer(serializers.ModelSerializer):
         return round((obj.used_count / obj.max_usage) * 100, 2)
 
     def validate_code(self, value):
-        # ✅ Always store coupon codes in uppercase
         return value.upper()
 
     def validate_value(self, value):
-        # ✅ Percentage can't exceed 100
         coupon_type = self.initial_data.get('type')
         if coupon_type == 'percentage' and value > 100:
             raise serializers.ValidationError("Percentage discount cannot exceed 100%")
@@ -201,5 +219,5 @@ class CouponSerializer(serializers.ModelSerializer):
 
 
 class ApplyCouponSerializer(serializers.Serializer):
-    code        = serializers.CharField()
-    cart_total  = serializers.DecimalField(max_digits=10, decimal_places=2)
+    code       = serializers.CharField()
+    cart_total = serializers.DecimalField(max_digits=10, decimal_places=2)
