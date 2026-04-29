@@ -213,21 +213,27 @@ class AdminPolicyAuditView(APIView):
     
 class UserPolicyView(APIView):
 
-    permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        policies = Policy.objects.filter(is_active=True).order_by('-updated_at')
-        serializer = PolicySerializer(policies, many=True)
-        return Response(
-            {"message": "Active policies retrieved", "data": serializer.data},
-            status=status.HTTP_200_OK
-        )
+        try:
+            print(request.user)
+            policies = Policy.objects.all().order_by('-updated_at')
+            serializer = PolicySerializer(policies, many=True)
+            return Response(
+                {"message": "Active policies retrieved", "data": serializer.data},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"message": "Failed to retrieve policies"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class UserPolicyDetailView(APIView):
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request, policy_type):
+        print(f"User {request.user} requested policy of type: {policy_type}")
         try:
             policy     = Policy.objects.get(policy_type=policy_type, is_active=True)
             serializer = PolicySerializer(policy)

@@ -6,6 +6,8 @@ from django.utils import timezone
 
 class PolicySerializer(serializers.ModelSerializer):
 
+    print("Serializing policy:")  # Debugging line
+
     last_updated = serializers.SerializerMethodField(read_only=True)
     is_outdated  = serializers.ReadOnlyField()
 

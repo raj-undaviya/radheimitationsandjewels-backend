@@ -9,6 +9,6 @@ from .views import (
 urlpatterns = [
     # Public (for your React storefront)
     path('<str:policy_type>/',            PublicPolicyView.as_view(),      name='public-policy'),
-    path('user/<str:policy_type>/',       UserPolicyDetailView.as_view(),        name='user-policy-detail'),
-    path('user/',                         UserPolicyView.as_view(),              name='user-policies'),
+    path('user/policies/<str:policy_type>/',       UserPolicyDetailView.as_view(),        name='user-policy-detail'),
+    path('user/policies/',                         UserPolicyView.as_view(),              name='user-policies'),
 ]

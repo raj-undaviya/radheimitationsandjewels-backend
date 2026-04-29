@@ -56,5 +56,4 @@ urlpatterns = [
     path('api/admin-panel/reports/sales-analytics/', SalesAnalyticsReportView.as_view(), name='report-sales-analytics'),
     path('api/admin-panel/reports/order-processing/', OrderProcessingReportView.as_view(), name='report-order-processing'),
     path('api/admin-panel/reports/client-insights/', ClientInsightsReportView.as_view(), name='report-client-insights'),
-
 ]
