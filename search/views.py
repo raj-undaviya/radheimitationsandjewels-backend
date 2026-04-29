@@ -1,36 +1,37 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.db.models import Q
 
-from appointments.serializers import AppointmentSerializer
-from appointments.models import Appointment
 from products.models import Product, Category, SubCategory
-from orders.models import Order
 from products.serializers import ProductSerializer, CategorySerializer, SubCategorySerializer
+from orders.models import Order
 from orders.serializers import OrderSerializer
-
-from .serializers import GlobalSearchSerializer
+from appointments.models import Appointment
+from appointments.serializers import AppointmentSerializer
 
 
 class GlobalSearchView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
-        query      = request.query_params.get('q', '').strip()
-        min_price  = request.query_params.get('min_price')
-        max_price  = request.query_params.get('max_price')
+        query     = request.query_params.get('q', '').strip()
+        min_price = request.query_params.get('min_price')
+        max_price = request.query_params.get('max_price')
 
         if not query and not min_price and not max_price:
-            return Response({"detail": "Please provide a search query 'q'."}, status=400)
+            return Response(
+                {"detail": "Please provide a search query 'q', 'min_price', or 'max_price'."},
+                status=400
+            )
 
         results = {
-            "query":        query,
-            "products":     [],
-            "categories":   [],
-            "subcategories":[],
-            "orders":       [],
-            "appointments": [],
+            "query":         query,
+            "products":      [],
+            "categories":    [],
+            "subcategories": [],
+            "orders":        [],
+            "appointments":  [],
         }
 
         # ── Products ──────────────────────────────────────────────────────
@@ -40,10 +41,8 @@ class GlobalSearchView(APIView):
 
         if query:
             product_qs = product_qs.filter(
-                Q(name__icontains=query)          |
-                Q(description__icontains=query)   |
-                Q(sku__icontains=query)            |
-                Q(tags__icontains=query)           |
+                Q(name__icontains=query)           |
+                Q(description__icontains=query)    |
                 Q(category__name__icontains=query) |
                 Q(subcategory__name__icontains=query)
             )
@@ -70,35 +69,39 @@ class GlobalSearchView(APIView):
         # ── SubCategories ─────────────────────────────────────────────────
         if query:
             subcategory_qs = SubCategory.objects.select_related('category').filter(
-                Q(name__icontains=query) |
-                Q(description__icontains=query) |
+                Q(name__icontains=query)               |
+                Q(description__icontains=query)        |
                 Q(category__name__icontains=query)
             )
             results["subcategories"] = SubCategorySerializer(
                 subcategory_qs, many=True, context={'request': request}
             ).data
 
-        # ── Orders ────────────────────────────────────────────────────────
-        if query:
-            order_qs = Order.objects.filter(user=request.user).filter(
-                Q(status__icontains=query)          |
-                Q(items__product__name__icontains=query) |
-                Q(address__icontains=query)         |
-                Q(city__icontains=query)
-            ).distinct()
-            results["orders"] = OrderSerializer(
-                order_qs, many=True, context={'request': request}
-            ).data
+        # # ── Orders ────────────────────────────────────────────────────────
+        # if query:
+        #     if request.user:
+        #         order_qs = Order.objects.filter(
+        #             user=request.user
+        #         ).filter(
+        #             Q(status__icontains=query)               |
+        #             Q(items__product__name__icontains=query) |
+        #             Q(address__icontains=query)              |
+        #             Q(city__icontains=query)
+        #         ).distinct()
+        #         results["orders"] = OrderSerializer(
+        #             order_qs, many=True, context={'request': request}
+        #         ).data
 
-        # ── Appointments ──────────────────────────────────────────────────
-        if query:
-            appointment_qs = Appointment.objects.filter(user=request.user).filter(
-                Q(status__icontains=query)       |
-                Q(service__icontains=query)      |
-                Q(notes__icontains=query)
-            )
-            results["appointments"] = AppointmentSerializer(
-                appointment_qs, many=True, context={'request': request}
-            ).data
+        # # ── Appointments ──────────────────────────────────────────────────
+        # if query:
+        #     appointment_qs = Appointment.objects.filter(
+        #         user=request.user
+        #     ).filter(
+        #         Q(status__icontains=query) |
+        #         Q(notes__icontains=query)
+        #     )
+        #     results["appointments"] = AppointmentSerializer(
+        #         appointment_qs, many=True, context={'request': request}
+        #     ).data
 
         return Response(results)
