@@ -35,7 +35,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True # False
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*', 'radheimitationsandjewels.com', 'www.radheimitationsandjewels.com']
+ALLOWED_HOSTS = ['*']
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -176,7 +176,7 @@ MEDIA_URL = '/images/'
 MEDIA_ROOT = BASE_DIR / 'static/images'
 
 # CORS
-CORS_ALLOW_HOSTS = ['localhost', '127.0.0.1', '*', 'radheimitationsandjewels.com', 'www.radheimitationsandjewels.com'] # For development only, configure appropriately in production
+CORS_ALLOW_HOSTS = ['*'] # For development only, configure appropriately in production
 CORS_ALLOW_ALL_ORIGINS = True # For development only, configure appropriately in production
 CORS_ALLOWED_METHODS = [
     'GET',
