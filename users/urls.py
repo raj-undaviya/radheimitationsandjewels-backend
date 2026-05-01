@@ -17,7 +17,8 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from .views import AuthenticateView, ForgetPasswordView, VerifyOTPView, CustomersView, CustomersDetailView, LogoutView
+from .views import AddressDetailView, AddressListCreateView, AuthenticateView, ForgetPasswordView, \
+      UserProfileView, SetDefaultAddressView, VerifyOTPView, CustomersView, CustomersDetailView, LogoutView
 
 urlpatterns = [
     path('auth', AuthenticateView.as_view(), name='authenticate'),
@@ -26,4 +27,9 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('customers', CustomersView.as_view(), name='customers'),
     path('customers/<int:customer_id>', CustomersDetailView.as_view(), name='customer-detail'),
+
+    path('profile/',                             UserProfileView.as_view()),
+    path('addresses/',                           AddressListCreateView.as_view()),
+    path('addresses/<int:pk>/',                  AddressDetailView.as_view()),
+    path('addresses/<int:pk>/set-default/',      SetDefaultAddressView.as_view()),
 ]

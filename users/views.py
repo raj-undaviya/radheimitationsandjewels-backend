@@ -7,8 +7,8 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.permissions import IsAuthenticated
 from users.permissions import IsAdminUserRole
 import cloudinary.uploader
-from .models import User, PasswordResetOTP
-from .serializers import AuthenticateSerializer, AuthenticateSerializerWithToken, AdminProfileSerializer, ChangePasswordSerializer
+from .models import User, PasswordResetOTP, Address
+from .serializers import AuthenticateSerializer, AuthenticateSerializerWithToken, AdminProfileSerializer, ChangePasswordSerializer, AddressSerializer, UserProfileSerializer
 import random
 from datetime import datetime
 from django.core.mail import send_mail
@@ -365,3 +365,205 @@ class AdminProfileImageDeleteView(APIView):
             {"message": "Profile image removed successfully"},
             status=status.HTTP_200_OK
         )
+
+# ── User Profile ──────────────────────────────────────────────
+
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes     = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        user       = request.user
+        addresses  = Address.objects.filter(user=user).order_by('-is_default', '-created_at')
+        default_address = addresses.filter(is_default=True).first()
+
+        return Response({
+            'message': 'Profile retrieved successfully',
+            'data': {
+                'id':            user.id,
+                'first_name':    user.first_name,
+                'last_name':     user.last_name,
+                'username':      user.username,
+                'email':         user.email,
+                'phonenumber':   user.phonenumber,
+                'profile_image': str(user.profile_image) if user.profile_image else None,
+                'role':          user.role,
+                'is_active':     user.is_active,
+                'created_at':    user.created_at.isoformat(),
+                'addresses':     AddressSerializer(addresses, many=True).data,
+                'default_address': AddressSerializer(default_address).data if default_address else None,
+            }
+        }, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        user          = request.user
+        data          = request.data.copy()
+        profile_image = request.FILES.get('profile_image')
+
+        # ✅ Upload to Cloudinary if new image provided
+        if profile_image:
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    profile_image,
+                    folder         = 'user_profiles/',
+                    transformation = [{"width": 400, "height": 400, "crop": "fill", "gravity": "face"}]
+                )
+                user.profile_image = upload_result['secure_url']
+            except Exception as e:
+                return Response(
+                    {'message': f'Image upload failed: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Update allowed fields only
+        user.first_name  = data.get('first_name',  user.first_name)
+        user.last_name   = data.get('last_name',   user.last_name)
+        user.username    = data.get('username',    user.username)
+        user.phonenumber = data.get('phonenumber', user.phonenumber)
+
+        # ✅ Check username uniqueness
+        if User.objects.exclude(id=user.id).filter(username=user.username).exists():
+            return Response(
+                {'message': 'Username already taken'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ✅ Check phone uniqueness
+        if User.objects.exclude(id=user.id).filter(phonenumber=user.phonenumber).exists():
+            return Response(
+                {'message': 'Phone number already registered'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.save()
+
+        return Response({
+            'message': 'Profile updated successfully',
+            'data': {
+                'id':            user.id,
+                'first_name':    user.first_name,
+                'last_name':     user.last_name,
+                'username':      user.username,
+                'email':         user.email,
+                'phonenumber':   user.phonenumber,
+                'profile_image': str(user.profile_image) if user.profile_image else None,
+            }
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        """Remove profile image."""
+        user               = request.user
+        user.profile_image = None
+        user.save()
+        return Response(
+            {'message': 'Profile image removed'},
+            status=status.HTTP_200_OK
+        )
+
+
+# ── Addresses ─────────────────────────────────────────────────
+
+class AddressListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """List all addresses — default first."""
+        addresses  = Address.objects.filter(user=request.user)
+        serializer = AddressSerializer(addresses, many=True)
+        return Response({
+            'message': 'Addresses retrieved',
+            'data':    serializer.data,
+            'total':   addresses.count(),
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        """Add new address."""
+        serializer = AddressSerializer(data=request.data)
+        if serializer.is_valid():
+            # ✅ If this is user's first address, auto set as default
+            if not Address.objects.filter(user=request.user).exists():
+                serializer.save(user=request.user, is_default=True)
+            else:
+                serializer.save(user=request.user)
+
+            return Response({
+                'message': 'Address added successfully',
+                'data':    serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            'message': 'Validation failed',
+            'errors':  serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AddressDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, pk, user):
+        try:
+            return Address.objects.get(pk=pk, user=user)
+        except Address.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        address = self.get_object(pk, request.user)
+        if not address:
+            return Response({'message': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({
+            'message': 'Address retrieved',
+            'data':    AddressSerializer(address).data
+        })
+
+    def patch(self, request, pk):
+        """Update address fields partially."""
+        address = self.get_object(pk, request.user)
+        if not address:
+            return Response({'message': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AddressSerializer(address, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'message': 'Address updated',
+                'data':    serializer.data
+            })
+        return Response({
+            'message': 'Validation failed',
+            'errors':  serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        """Delete address. If it was default, auto-assign next address as default."""
+        address = self.get_object(pk, request.user)
+        if not address:
+            return Response({'message': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        was_default = address.is_default
+        address.delete()
+
+        # ✅ Auto assign next address as default if deleted one was default
+        if was_default:
+            next_address = Address.objects.filter(user=request.user).first()
+            if next_address:
+                next_address.is_default = True
+                next_address.save()
+
+        return Response({'message': 'Address deleted'}, status=status.HTTP_204_NO_CONTENT)
+
+
+class SetDefaultAddressView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk):
+        """Set address as default — removes default from all others automatically."""
+        try:
+            address            = Address.objects.get(pk=pk, user=request.user)
+            address.is_default = True
+            address.save()     # model's save() handles removing old default
+            return Response({
+                'message': 'Default address updated',
+                'data':    AddressSerializer(address).data
+            })
+        except Address.DoesNotExist:
+            return Response({'message': 'Address not found'}, status=status.HTTP_404_NOT_FOUND)
