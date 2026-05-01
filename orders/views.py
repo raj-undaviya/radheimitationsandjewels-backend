@@ -21,6 +21,7 @@ from .models import Cart, CartItem, Coupon, Wishlist, Order, OrderItem
 from .serializers import CartSerializer, CartItemSerializer, WishlistSerializer, \
       OrderSerializer, OrderItemSerializer, CouponSerializer, ApplyCouponSerializer
 from decimal import Decimal
+from users.serializers import CustomerSerializer
 
 User = get_user_model()
 
@@ -464,14 +465,15 @@ class AdminUsersView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserRole]
     def get(self, request):
 
-        users = User.objects.all().values('id', 'email', 'role', 'date_joined', 'username', 'first_name', 'last_name', 'phonenumber', 'profile_image').order_by('-date_joined')
+        users      = User.objects.all().order_by('-date_joined')
+        serializer = CustomerSerializer(users, many=True)
         total_users = users.count()
 
         return Response(
             {
                 "message": "Users list",
                 "total_users": total_users,
-                "data": list(users)
+                "data": serializer.data
             },
             status=status.HTTP_200_OK
         )
